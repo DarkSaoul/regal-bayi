@@ -1,0 +1,12 @@
+# .env dosyasına dışarıdan erişimi engelle
+<Files ".env">
+    Order allow,deny
+    Deny from all
+</Files>
+
+# Directory listing kapalı
+Options -Indexes
+
+# PHP hata gösterimini kapat
+php_flag display_errors off
+php_flag log_errors on

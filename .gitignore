@@ -1,0 +1,29 @@
+# Ortam ve hassas veriler
+.env
+.env.*
+
+# Log dosyaları
+*.log
+logs/
+
+# Önbellek
+*.cache
+.cache/
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS
+.DS_Store
+Thumbs.db
+desktop.ini
+
+# PHP bağımlılıkları (varsa)
+vendor/
+composer.lock
+
+# Veritabanı dökümleri (hassas)
+sql/ornek_veri.sql
