@@ -207,3 +207,12 @@ INSERT INTO kategoriler (id, ad, ust_id) VALUES
 -- Örnek tedarikçi
 INSERT INTO tedarikciler (ad, yetkili, telefon, email) VALUES
 ('Regal Türkiye Distribütörü', 'Satış Departmanı', '0212 000 00 00', 'satis@regal.com.tr');
+
+-- Ayarlar
+CREATE TABLE IF NOT EXISTS ayarlar (
+    anahtar VARCHAR(100) PRIMARY KEY,
+    deger TEXT,
+    grup VARCHAR(50) DEFAULT 'genel',
+    aciklama VARCHAR(255),
+    updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP
+) ENGINE=InnoDB;

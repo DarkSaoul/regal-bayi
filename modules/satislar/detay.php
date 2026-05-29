@@ -60,8 +60,10 @@ require_once __DIR__ . '/../../includes/header.php';
                 <div class="row mb-3">
                     <div class="col-6">
                         <strong>SATICI</strong><br>
-                        Regal Bayi<br>
-                        <small class="text-muted">regalbayi@example.com</small>
+                        <?= escH(ayar('firma_adi','Regal Bayi')) ?><br>
+                        <?php if (ayar('firma_telefon')): ?><small><?= escH(ayar('firma_telefon')) ?></small><br><?php endif; ?>
+                        <?php if (ayar('firma_email')): ?><small class="text-muted"><?= escH(ayar('firma_email')) ?></small><br><?php endif; ?>
+                        <?php if (ayar('firma_adres')): ?><small class="text-muted"><?= escH(ayar('firma_adres')) ?></small><?php endif; ?>
                     </div>
                     <div class="col-6 text-end">
                         <strong>MÜŞTERİ</strong><br>

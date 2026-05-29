@@ -198,6 +198,25 @@ function stokGuncelle($urun_id, $fark, $tip, $belge_no = '', $aciklama = '', $te
         ->execute([$urun_id, $tip, abs($fark), $onceki, $sonraki, $belge_no, $aciklama, $tedarikci_id, $_SESSION['kullanici_id'] ?? null]);
 }
 
+// ── Ayarlar ───────────────────────────────────────────────────
+function ayar(string $anahtar, string $varsayilan = ''): string {
+    static $cache = null;
+    if ($cache === null) {
+        try {
+            $stmt = db()->query("SELECT anahtar, deger FROM ayarlar");
+            $cache = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
+        } catch (Exception $e) {
+            $cache = [];
+        }
+    }
+    return $cache[$anahtar] ?? $varsayilan;
+}
+
+function ayarKaydet(string $anahtar, string $deger): void {
+    db()->prepare("INSERT INTO ayarlar (anahtar, deger) VALUES (?,?) ON DUPLICATE KEY UPDATE deger=?, updated_at=NOW()")
+        ->execute([$anahtar, $deger, $deger]);
+}
+
 // ── Bildirim sayaçları ────────────────────────────────────────
 function minStokUyarilari() {
     $pdo  = db();

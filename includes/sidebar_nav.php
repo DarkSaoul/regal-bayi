@@ -64,5 +64,11 @@
             <i class="bi bi-person-gear"></i><span>Kullanıcılar</span>
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link <?= navAktif('ayarlar') ?>"
+           href="<?= BASE_URL ?>/modules/ayarlar/">
+            <i class="bi bi-gear"></i><span>Ayarlar</span>
+        </a>
+    </li>
     <?php endif; ?>
 </ul>

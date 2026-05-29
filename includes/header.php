@@ -4,6 +4,18 @@ $mevcut_sayfa = basename(dirname($_SERVER['PHP_SELF']));
 $uyari_stok   = minStokUyarilari();
 $bekleyen_odeme = bekleyenTahsilat();
 
+// Tema rengi
+$_tema = ayar('tema_renk', 'primary');
+$_tema_renkler = [
+    'primary' => ['hex' => '#0d6efd', 'rgb' => '13,110,253',  'nav_class' => 'bg-primary'],
+    'success' => ['hex' => '#198754', 'rgb' => '25,135,84',   'nav_class' => 'bg-success'],
+    'danger'  => ['hex' => '#dc3545', 'rgb' => '220,53,69',   'nav_class' => 'bg-danger'],
+    'warning' => ['hex' => '#e08c00', 'rgb' => '224,140,0',   'nav_class' => 'bg-warning'],
+    'dark'    => ['hex' => '#212529', 'rgb' => '33,37,41',    'nav_class' => 'bg-dark'],
+    'purple'  => ['hex' => '#6f42c1', 'rgb' => '111,66,193',  'nav_class' => 'bg-purple'],
+];
+$_t = $_tema_renkler[$_tema] ?? $_tema_renkler['primary'];
+
 // Aktif menü tespiti
 $nav = [
     'dashboard'   => BASE_URL . '/modules/dashboard/',
@@ -29,15 +41,33 @@ function navAktif($sayfa) {
 <meta name="theme-color" content="#0d6efd">
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<title><?= $sayfa_basligi ?? 'Regal Bayi' ?> | Regal Bayi</title>
+<title><?= escH($sayfa_basligi ?? '') ?><?= $sayfa_basligi ? ' | ' : '' ?><?= escH(ayar('site_basligi','Regal Bayi Yönetim')) ?></title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>/assets/css/style.css">
+<style>
+  /* Dinamik tema rengi — ayarlardan gelir */
+  :root {
+    --bs-primary:        <?= $_t['hex'] ?>;
+    --bs-primary-rgb:    <?= $_t['rgb'] ?>;
+    --theme-hex:         <?= $_t['hex'] ?>;
+    --theme-rgb:         <?= $_t['rgb'] ?>;
+  }
+  .bg-purple { background-color: #6f42c1 !important; }
+  .text-purple { color: #6f42c1 !important; }
+  /* Sidebar aktif çizgisi */
+  .sidebar-nav .nav-link.active { border-left-color: var(--theme-hex); }
+  /* Butonlar ve linkler */
+  .btn-primary  { --bs-btn-bg: var(--theme-hex); --bs-btn-border-color: var(--theme-hex);
+                  --bs-btn-hover-bg: color-mix(in srgb, var(--theme-hex) 85%, black); }
+  .toplam-kutu  { background: linear-gradient(135deg, var(--theme-hex), color-mix(in srgb, var(--theme-hex) 80%, black)) !important; }
+  a { color: var(--bs-primary); }
+</style>
 </head>
 <body>
 
 <!-- ══ NAVBAR ══════════════════════════════════════════════ -->
-<nav class="navbar navbar-dark bg-primary fixed-top px-2 px-md-3">
+<nav class="navbar navbar-dark fixed-top px-2 px-md-3" style="background-color: <?= $_t['hex'] ?> !important">
     <!-- Mobil: off-canvas toggle -->
     <button class="btn btn-link text-white d-md-none p-1 me-1"
             type="button" data-bs-toggle="offcanvas" data-bs-target="#mobileSidebar"
@@ -47,8 +77,8 @@ function navAktif($sayfa) {
 
     <a class="navbar-brand fw-bold me-auto" href="<?= BASE_URL ?>/modules/dashboard/">
         <i class="bi bi-shop"></i>
-        <span class="d-none d-sm-inline">Regal Bayi</span>
-        <span class="d-inline d-sm-none">Regal</span>
+        <span class="d-none d-sm-inline"><?= escH(ayar('firma_adi','Regal Bayi')) ?></span>
+        <span class="d-inline d-sm-none"><?= escH(mb_substr(ayar('firma_adi','Regal'),0,8)) ?></span>
     </a>
 
     <!-- Uyarı ikonları -->
