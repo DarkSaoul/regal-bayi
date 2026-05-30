@@ -27,3 +27,9 @@ composer.lock
 
 # Veritabanı dökümleri (hassas)
 sql/ornek_veri.sql
+
+# Yedek dosyaları (hassas, büyük)
+backups/
+
+# Kurulum kilidi
+install/installed.lock
