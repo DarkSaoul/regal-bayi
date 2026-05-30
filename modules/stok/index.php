@@ -19,6 +19,7 @@ require_once __DIR__ . '/../../includes/header.php';
 <div class="page-header d-flex justify-content-between align-items-center">
     <h4><i class="bi bi-archive text-primary"></i> Stok Takibi</h4>
     <div class="d-flex gap-2">
+        <a href="tesir.php" class="btn btn-outline-warning"><i class="bi bi-shop-window"></i> Teşhir Yönetimi</a>
         <a href="giris.php" class="btn btn-success"><i class="bi bi-box-arrow-in-down"></i> Stok Giriş</a>
         <a href="cikis.php" class="btn btn-outline-danger"><i class="bi bi-box-arrow-up"></i> Stok Çıkış</a>
     </div>
@@ -51,25 +52,46 @@ require_once __DIR__ . '/../../includes/header.php';
         <table class="table table-hover mb-0">
             <thead><tr>
                 <th>Kod</th><th>Ürün Adı</th><th>Kategori</th>
-                <th class="text-center">Mevcut Stok</th>
-                <th class="text-center">Min. Stok</th>
+                <th class="text-center">Depo</th>
+                <th class="text-center">Teşhir</th>
+                <th class="text-center">Toplam</th>
+                <th class="text-center">Min.</th>
                 <th class="text-center">Durum</th>
                 <th>İşlem</th>
             </tr></thead>
             <tbody>
-            <?php foreach ($urunler as $u): ?>
-            <?php $durum = $u['stok_adedi'] <= 0 ? 'Tükendi' : ($u['stok_adedi'] <= $u['min_stok'] ? 'Kritik' : 'Normal'); ?>
-            <?php $renk  = $u['stok_adedi'] <= 0 ? 'danger' : ($u['stok_adedi'] <= $u['min_stok'] ? 'warning' : 'success'); ?>
+            <?php foreach ($urunler as $u):
+                $tesir  = (int)$u['tesir_adedi'];
+                $depoda = $u['stok_adedi'] - $tesir;
+                $durum  = $u['stok_adedi'] <= 0 ? 'Tükendi' : ($u['stok_adedi'] <= $u['min_stok'] ? 'Kritik' : 'Normal');
+                $renk   = $u['stok_adedi'] <= 0 ? 'danger' : ($u['stok_adedi'] <= $u['min_stok'] ? 'warning' : 'success');
+            ?>
             <tr class="<?= $u['stok_adedi'] <= $u['min_stok'] ? 'table-warning' : '' ?>">
                 <td><code><?= escH($u['kod']) ?></code></td>
-                <td><?= escH($u['ad']) ?></td>
+                <td>
+                    <?= escH($u['ad']) ?>
+                    <?php if ($tesir > 0): ?>
+                    <span class="badge bg-warning text-dark ms-1" title="Teşhirde">
+                        <i class="bi bi-shop-window"></i> <?= $tesir ?> teşhir
+                    </span>
+                    <?php endif; ?>
+                </td>
                 <td><?= escH($u['kategori_adi'] ?? '-') ?></td>
+                <td class="text-center fw-bold"><?= $depoda ?></td>
+                <td class="text-center">
+                    <?php if ($tesir > 0): ?>
+                    <span class="fw-bold text-warning"><?= $tesir ?></span>
+                    <?php else: ?>
+                    <span class="text-muted">—</span>
+                    <?php endif; ?>
+                </td>
                 <td class="text-center fw-bold fs-5"><?= $u['stok_adedi'] ?></td>
                 <td class="text-center"><?= $u['min_stok'] ?></td>
                 <td class="text-center"><span class="badge bg-<?= $renk ?>"><?= $durum ?></span></td>
                 <td>
                     <a href="giris.php?urun_id=<?= $u['id'] ?>" class="btn btn-sm btn-outline-success" title="Giriş"><i class="bi bi-plus"></i></a>
                     <a href="cikis.php?urun_id=<?= $u['id'] ?>" class="btn btn-sm btn-outline-danger" title="Çıkış"><i class="bi bi-dash"></i></a>
+                    <a href="tesir.php" class="btn btn-sm btn-outline-warning" title="Teşhir"><i class="bi bi-shop-window"></i></a>
                     <a href="hareketler.php?urun_id=<?= $u['id'] ?>" class="btn btn-sm btn-outline-secondary" title="Hareketler"><i class="bi bi-clock-history"></i></a>
                 </td>
             </tr>

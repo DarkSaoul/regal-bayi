@@ -25,6 +25,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $kalem_fiyatlar   = $d['kalem_fiyat']   ?? [];
     $kalem_kdvler     = $d['kalem_kdv']     ?? [];
     $kalem_indirimler = $d['kalem_indirim'] ?? [];
+    $kalem_tesirler   = $d['kalem_tesir']   ?? [];
 
     if (empty(array_filter($kalem_urunler))) {
         $hata = 'En az bir ürün eklemelisiniz.';
@@ -53,7 +54,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $satir_kdv = round($satir_ara * $kdv / 100, 2);
             $toplam    = round($satir_ara + $satir_kdv, 2);
             $ara += $satir_ara; $kdv_t += $satir_kdv; $indirim_t += $indirim;
-            $kalemler[] = [$uid, $miktar, $fiyat, $kdv, $satir_kdv, $indirim, $toplam];
+            $tesir_satis = isset($kalem_tesirler[$i]) ? 1 : 0;
+            $kalemler[] = [$uid, $miktar, $fiyat, $kdv, $satir_kdv, $indirim, $toplam, $tesir_satis];
         }
 
         if (!empty($stokHatasi)) {
@@ -70,10 +72,18 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 ->execute([$fatura_no, $musteri, $_SESSION['kullanici_id'], $tarih, $ara, $kdv_t, $indirim_t, $genel, $odeme_tipi, $taksit_sayisi, $odenen, $kalan, $durum, $d['notlar'] ?? '']);
             $satis_id = $pdo->lastInsertId();
 
-            foreach ($kalemler as [$uid, $miktar, $fiyat, $kdv, $kdv_t2, $indirim, $toplam]) {
-                $pdo->prepare("INSERT INTO satis_kalemleri (satis_id,urun_id,miktar,birim_fiyat,kdv_orani,kdv_tutar,indirim,toplam) VALUES (?,?,?,?,?,?,?,?)")
-                    ->execute([$satis_id, $uid, $miktar, $fiyat, $kdv, $kdv_t2, $indirim, $toplam]);
+            foreach ($kalemler as [$uid, $miktar, $fiyat, $kdv, $kdv_t2, $indirim, $toplam, $tesir_satis]) {
+                $pdo->prepare("INSERT INTO satis_kalemleri (satis_id,urun_id,miktar,birim_fiyat,kdv_orani,kdv_tutar,indirim,toplam,tesir_satis) VALUES (?,?,?,?,?,?,?,?,?)")
+                    ->execute([$satis_id, $uid, $miktar, $fiyat, $kdv, $kdv_t2, $indirim, $toplam, $tesir_satis]);
                 stokGuncelle($uid, -$miktar, 'cikis', $fatura_no, 'Satış', null);
+                // Teşhir satışıysa tesir_adedi azalt
+                if ($tesir_satis) {
+                    $pdo->prepare("UPDATE urunler SET tesir_adedi = GREATEST(0, tesir_adedi - ?) WHERE id=?")
+                        ->execute([$miktar, $uid]);
+                    // Seri no'lu ürün ise ilk tesirde kaydını satildi yap
+                    $pdo->prepare("UPDATE seri_numaralari SET durum='satildi', satis_id=? WHERE urun_id=? AND durum='tesirde' LIMIT ?")
+                        ->execute([$satis_id, $uid, $miktar]);
+                }
             }
 
             if ($odenen > 0) {
@@ -371,6 +381,7 @@ const urunler = <?= json_encode(array_map(fn($u) => [
     'fiyat'  => (float)$u['satis_fiyati'],
     'kdv'    => (float)$u['kdv_orani'],
     'stok'   => (int)$u['stok_adedi'],
+    'tesir'  => (int)$u['tesir_adedi'],
 ], $urunler), JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT) ?>;
 window._urunler = urunler; // main.js barkodEkle() için erişim
 
@@ -449,15 +460,17 @@ function kalemEkle(urun = null) {
     row.className = 'kalem-row';
 
     const options = urunler.map(u =>
-        `<option value="${u.id}" data-fiyat="${u.fiyat}" data-kdv="${u.kdv}" data-stok="${u.stok}" data-kod="${u.kod}" data-barkod="${u.barkod}"
+        `<option value="${u.id}" data-fiyat="${u.fiyat}" data-kdv="${u.kdv}" data-stok="${u.stok}" data-tesir="${u.tesir}" data-kod="${u.kod}" data-barkod="${u.barkod}"
             ${urun && urun.id == u.id ? ' selected' : ''}>${u.label} (Stok: ${u.stok})</option>`
     ).join('');
 
-    const fiyat   = urun ? urun.fiyat   : '';
-    const kdv     = urun ? urun.kdv     : 20;
-    const stok    = urun ? urun.stok    : null;
+    const fiyat   = urun ? urun.fiyat : '';
+    const kdv     = urun ? urun.kdv   : 20;
+    const stok    = urun ? urun.stok  : null;
+    const tesirAd = urun ? urun.tesir : 0;
     const stokRenk = stok !== null ? (stok <= 0 ? 'danger' : stok <= 3 ? 'warning' : 'success') : '';
-    const stokMsg  = stok !== null ? `<span class="badge bg-${stokRenk} kalem-stok-uyari ms-1">${stok} stok</span>` : '';
+    let stokMsg = stok !== null ? `<span class="badge bg-${stokRenk} kalem-stok-uyari me-1">${stok} stok</span>` : '';
+    if (tesirAd > 0) stokMsg += `<span class="badge bg-warning text-dark kalem-stok-uyari"><i class="bi bi-shop-window"></i> ${tesirAd} teşhir</span>`;
 
     row.innerHTML = `
         <td>
@@ -465,6 +478,15 @@ function kalemEkle(urun = null) {
                 <option value="">Ürün seçin...</option>${options}
             </select>
             <div class="k-stok-info mt-1">${stokMsg}</div>
+            <div class="k-tesir-div mt-1" style="display:${tesirAd > 0 ? '' : 'none'}">
+                <div class="form-check form-check-sm">
+                    <input class="form-check-input k-tesir" type="checkbox"
+                           name="kalem_tesir[${idx}]" value="1" id="tesir_${idx}">
+                    <label class="form-check-label small text-warning fw-semibold" for="tesir_${idx}">
+                        <i class="bi bi-shop-window"></i> Teşhir ürününden sat
+                    </label>
+                </div>
+            </div>
         </td>
         <td>
             <input type="number" name="kalem_miktar[]" class="form-control form-control-sm k-miktar text-center fw-bold"
@@ -501,10 +523,23 @@ function kalemEkle(urun = null) {
         const opt = this.options[this.selectedIndex];
         row.querySelector('.k-fiyat').value = opt.dataset.fiyat || '';
         row.querySelector('.k-kdv').value   = opt.dataset.kdv   || 20;
-        const stok = parseInt(opt.dataset.stok ?? -1);
-        const renk = stok <= 0 ? 'danger' : stok <= 3 ? 'warning' : 'success';
-        row.querySelector('.k-stok-info').innerHTML = opt.value
-            ? `<span class="badge bg-${renk} kalem-stok-uyari">Stok: ${stok}</span>` : '';
+        const stok  = parseInt(opt.dataset.stok  ?? -1);
+        const tesir = parseInt(opt.dataset.tesir ?? 0);
+        const renk  = stok <= 0 ? 'danger' : stok <= 3 ? 'warning' : 'success';
+        let info = '';
+        if (opt.value) {
+            info = `<span class="badge bg-${renk} kalem-stok-uyari me-1">Stok: ${stok}</span>`;
+            if (tesir > 0) {
+                info += `<span class="badge bg-warning text-dark kalem-stok-uyari">
+                    <i class="bi bi-shop-window"></i> ${tesir} teşhir
+                </span>`;
+            }
+        }
+        row.querySelector('.k-stok-info').innerHTML = info;
+        // Teşhir checkbox göster/gizle
+        const tesirDiv = row.querySelector('.k-tesir-div');
+        tesirDiv.style.display = (opt.value && tesir > 0) ? '' : 'none';
+        if (!opt.value || tesir === 0) row.querySelector('.k-tesir').checked = false;
         satisHesapla();
     });
 

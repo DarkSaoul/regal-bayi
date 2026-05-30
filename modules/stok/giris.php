@@ -18,13 +18,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $tedarikci    = (int)($_POST['tedarikci_id'] ?? 0) ?: null;
     $birim_maliyet = $_POST['birim_maliyet'] !== '' ? (float)$_POST['birim_maliyet'] : null;
 
+    $tesir_adet = max(0, min((int)($_POST['tesir_adet'] ?? 0), $miktar));
+
     if ($uid > 0 && $miktar > 0) {
         stokGuncelle($uid, $miktar, 'giris', $belge, $aciklama, $tedarikci, $birim_maliyet);
         if ($tedarikci && $birim_maliyet !== null && $birim_maliyet > 0) {
             $toplam = round($miktar * $birim_maliyet, 2);
             $pdo->prepare("UPDATE tedarikciler SET toplam_borc = toplam_borc + ? WHERE id=?")->execute([$toplam, $tedarikci]);
         }
-        logla('stok_giris', 'stok', $uid, "$miktar adet stok girişi" . ($belge ? " | Belge: $belge" : ''));
+        // Teşhire al
+        if ($tesir_adet > 0) {
+            $pdo->prepare("UPDATE urunler SET tesir_adedi = tesir_adedi + ? WHERE id=?")
+                ->execute([$tesir_adet, $uid]);
+            logla('tesir_guncelle', 'stok', $uid, "Stok girişiyle $tesir_adet adet teşhire alındı");
+        }
+        logla('stok_giris', 'stok', $uid, "$miktar adet stok girişi" . ($belge ? " | Belge: $belge" : '') . ($tesir_adet ? " | $tesir_adet teşhir" : ''));
 
         // Seri no girişleri
         $seri_nolar = array_filter(array_map('trim', explode("\n", $_POST['seri_nolar'] ?? '')));
@@ -102,6 +110,18 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="mb-3">
             <label class="form-label fw-semibold">Açıklama</label>
             <input type="text" name="aciklama" class="form-control" value="<?= escH($_POST['aciklama']??'') ?>">
+        </div>
+        <div class="mb-3 p-3 border rounded bg-warning bg-opacity-10">
+            <label class="form-label fw-semibold">
+                <i class="bi bi-shop-window text-warning"></i> Teşhire Al
+                <small class="text-muted fw-normal">(opsiyonel)</small>
+            </label>
+            <div class="input-group" style="max-width:200px">
+                <input type="number" name="tesir_adet" class="form-control" min="0" value="0"
+                       placeholder="0" id="tesirAdet">
+                <span class="input-group-text">adet</span>
+            </div>
+            <div class="form-text">Bu girişten kaç adedini doğrudan teşhire almak istiyorsunuz?</div>
         </div>
         <div class="mb-3" id="seriNoAlan" style="display:none">
             <label class="form-label fw-semibold">Seri Numaraları <small class="text-muted">(her satıra bir tane)</small></label>

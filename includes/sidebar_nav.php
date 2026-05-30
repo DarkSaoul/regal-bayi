@@ -38,6 +38,12 @@
         </a>
     </li>
     <li class="nav-item">
+        <a class="nav-link <?= navAktif('tesir') ?>"
+           href="<?= BASE_URL ?>/modules/stok/tesir.php">
+            <i class="bi bi-shop-window"></i><span>Teşhir Yönetimi</span>
+        </a>
+    </li>
+    <li class="nav-item">
         <a class="nav-link <?= navAktif('sayim') ?>"
            href="<?= BASE_URL ?>/modules/stok/sayim.php">
             <i class="bi bi-clipboard-check"></i><span>Stok Sayımı</span>

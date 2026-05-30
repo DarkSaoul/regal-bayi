@@ -10,6 +10,7 @@ if (!$satis) { flash('hata','Satış bulunamadı.'); header('Location: index.php
 
 $kalemler = $pdo->prepare("SELECT sk.*, u.ad AS urun_adi, u.kod FROM satis_kalemleri sk JOIN urunler u ON sk.urun_id=u.id WHERE sk.satis_id=?");
 $kalemler->execute([$id]); $kalemler = $kalemler->fetchAll();
+$tesirSatis = !empty(array_filter($kalemler, fn($k) => $k['tesir_satis']));
 
 $odemeler = $pdo->prepare("SELECT * FROM odemeler WHERE satis_id=? ORDER BY tarih");
 $odemeler->execute([$id]); $odemeler = $odemeler->fetchAll();
@@ -35,7 +36,14 @@ $sayfa_basligi = 'Fatura: ' . $satis['fatura_no'];
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-header d-flex justify-content-between no-print">
-    <h4><i class="bi bi-receipt text-primary"></i> <?= escH($satis['fatura_no']) ?></h4>
+    <h4>
+        <i class="bi bi-receipt text-primary"></i> <?= escH($satis['fatura_no']) ?>
+        <?php if ($tesirSatis): ?>
+        <span class="badge bg-warning text-dark ms-2" title="Bu satışta teşhir ürünü var">
+            <i class="bi bi-shop-window"></i> Teşhir Satışı
+        </span>
+        <?php endif; ?>
+    </h4>
     <div class="d-flex gap-2">
         <?php if ($satis['kalan_tutar']>0): ?>
         <a href="<?= BASE_URL ?>/modules/finans/tahsilat.php?satis_id=<?= $id ?>" class="btn btn-success">
@@ -83,7 +91,15 @@ require_once __DIR__ . '/../../includes/header.php';
                     <?php foreach ($kalemler as $i => $k): ?>
                     <tr>
                         <td><?= $i+1 ?></td>
-                        <td><strong><?= escH($k['urun_adi']) ?></strong><br><small><?= escH($k['kod']) ?></small></td>
+                        <td>
+                        <strong><?= escH($k['urun_adi']) ?></strong>
+                        <?php if ($k['tesir_satis']): ?>
+                        <span class="badge bg-warning text-dark ms-1" title="Teşhir ürününden satıldı">
+                            <i class="bi bi-shop-window"></i> Teşhir
+                        </span>
+                        <?php endif; ?>
+                        <br><small><?= escH($k['kod']) ?></small>
+                    </td>
                         <td><?= $k['miktar'] ?></td>
                         <td><?= para($k['birim_fiyat']) ?></td>
                         <td>%<?= $k['kdv_orani'] ?><br><small><?= para($k['kdv_tutar']) ?></small></td>
