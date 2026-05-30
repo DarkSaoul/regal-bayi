@@ -158,17 +158,17 @@ function showFlash() {
 
 // ── Yardımcı formatlama ───────────────────────────────────────
 function para($tutar) {
-    return number_format((float)$tutar, 2, ',', '.') . ' ₺';
+    return number_format((float)$tutar, 2, ',', '.') . ' ' . ayar('para_sembol', '₺');
 }
 
 function tarih($str) {
     if (!$str) return '-';
-    return date('d.m.Y', strtotime($str));
+    return date(ayar('tarih_formati', 'd.m.Y'), strtotime($str));
 }
 
 function tarihSaat($str) {
     if (!$str) return '-';
-    return date('d.m.Y H:i', strtotime($str));
+    return date(ayar('tarih_formati', 'd.m.Y') . ' H:i', strtotime($str));
 }
 
 function escH($str) {
@@ -182,20 +182,22 @@ function yeniFaturaNo() {
     $ay   = date('m');
     $stmt = $pdo->prepare("SELECT COUNT(*) FROM satislar WHERE YEAR(tarih)=? AND MONTH(tarih)=?");
     $stmt->execute([$yil, $ay]);
-    $sayi = (int)$stmt->fetchColumn() + 1;
-    return 'F' . $yil . $ay . str_pad($sayi, 4, '0', STR_PAD_LEFT);
+    $sayi   = (int)$stmt->fetchColumn() + 1;
+    $prefix = ayar('fatura_prefix', 'F');
+    return $prefix . $yil . $ay . str_pad($sayi, 4, '0', STR_PAD_LEFT);
 }
 
 // ── Stok güncelle ─────────────────────────────────────────────
-function stokGuncelle($urun_id, $fark, $tip, $belge_no = '', $aciklama = '', $tedarikci_id = null) {
+function stokGuncelle($urun_id, $fark, $tip, $belge_no = '', $aciklama = '', $tedarikci_id = null, $birim_maliyet = null) {
     $pdo = db();
     $stmt = $pdo->prepare("SELECT stok_adedi FROM urunler WHERE id=?");
     $stmt->execute([$urun_id]);
-    $onceki  = (int)$stmt->fetchColumn();
-    $sonraki = $onceki + $fark;
+    $onceki        = (int)$stmt->fetchColumn();
+    $sonraki       = $onceki + $fark;
+    $toplam_maliyet = ($birim_maliyet !== null) ? round(abs($fark) * $birim_maliyet, 2) : null;
     $pdo->prepare("UPDATE urunler SET stok_adedi=? WHERE id=?")->execute([$sonraki, $urun_id]);
-    $pdo->prepare("INSERT INTO stok_hareketleri (urun_id,hareket_tipi,miktar,onceki_stok,sonraki_stok,belge_no,aciklama,tedarikci_id,kullanici_id) VALUES (?,?,?,?,?,?,?,?,?)")
-        ->execute([$urun_id, $tip, abs($fark), $onceki, $sonraki, $belge_no, $aciklama, $tedarikci_id, $_SESSION['kullanici_id'] ?? null]);
+    $pdo->prepare("INSERT INTO stok_hareketleri (urun_id,hareket_tipi,miktar,onceki_stok,sonraki_stok,belge_no,aciklama,birim_maliyet,toplam_maliyet,tedarikci_id,kullanici_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)")
+        ->execute([$urun_id, $tip, abs($fark), $onceki, $sonraki, $belge_no, $aciklama, $birim_maliyet, $toplam_maliyet, $tedarikci_id, $_SESSION['kullanici_id'] ?? null]);
 }
 
 // ── Ayarlar ───────────────────────────────────────────────────
@@ -217,15 +219,60 @@ function ayarKaydet(string $anahtar, string $deger): void {
         ->execute([$anahtar, $deger, $deger]);
 }
 
-// ── Bildirim sayaçları ────────────────────────────────────────
-function minStokUyarilari() {
-    $pdo  = db();
-    $stmt = $pdo->query("SELECT COUNT(*) FROM urunler WHERE stok_adedi <= min_stok AND aktif=1");
-    return (int)$stmt->fetchColumn();
+// ── Aktivite logu ────────────────────────────────────────────
+function logla(string $aksiyon, string $modul = '', int $hedef_id = 0, string $detay = ''): void {
+    try {
+        db()->prepare("INSERT INTO aktivite_loglari (kullanici_id,aksiyon,modul,hedef_id,detay,ip_adresi) VALUES (?,?,?,?,?,?)")
+            ->execute([
+                $_SESSION['kullanici_id'] ?? null,
+                $aksiyon,
+                $modul ?: null,
+                $hedef_id ?: null,
+                $detay ?: null,
+                $_SERVER['REMOTE_ADDR'] ?? null,
+            ]);
+    } catch (Exception $e) {}
 }
 
-function bekleyenTahsilat() {
-    $pdo  = db();
-    $stmt = $pdo->query("SELECT COUNT(*) FROM satislar WHERE kalan_tutar > 0 AND durum='bekliyor'");
-    return (int)$stmt->fetchColumn();
+// ── Yedekleme yardımcıları ───────────────────────────────────
+function bugunYedekVarMi(): bool {
+    $yedekDir = __DIR__ . '/../backups/';
+    $bugun    = date('Y-m-d');
+    foreach (glob($yedekDir . '*.sql') ?: [] as $dosya) {
+        if (str_contains(basename($dosya), $bugun)) return true;
+    }
+    return false;
+}
+
+function otomatikYedekAl(): bool {
+    $yedekDir = __DIR__ . '/../backups/';
+    if (!is_dir($yedekDir)) mkdir($yedekDir, 0777, true);
+    $dosyaAdi = 'regal_bayi_oto_' . date('Y-m-d_H-i-s') . '.sql';
+    $hedef    = $yedekDir . $dosyaAdi;
+    $cmd = escapeshellcmd('/opt/lampp/bin/mysqldump')
+         . ' -u ' . escapeshellarg(DB_USER)
+         . ' '    . escapeshellarg(DB_NAME)
+         . ' > '  . escapeshellarg($hedef)
+         . ' 2>/dev/null';
+    exec($cmd, $cikti, $kod);
+    if ($kod === 0 && file_exists($hedef)) {
+        ayarKaydet('son_oto_yedek', date('Y-m-d H:i:s'));
+        return true;
+    }
+    return false;
+}
+
+// ── Bildirim sayaçları ────────────────────────────────────────
+function minStokUyarilari(): int {
+    return (int)db()->query("SELECT COUNT(*) FROM urunler WHERE stok_adedi <= min_stok AND aktif=1")->fetchColumn();
+}
+
+function bekleyenTahsilat(): int {
+    return (int)db()->query("SELECT COUNT(*) FROM satislar WHERE kalan_tutar > 0 AND durum='bekliyor'")->fetchColumn();
+}
+
+function geckmisKisatSayisi(): int {
+    try {
+        return (int)db()->query("SELECT COUNT(*) FROM taksit_plani WHERE odendi=0 AND vade_tarihi < CURDATE()")->fetchColumn();
+    } catch (Exception $e) { return 0; }
 }

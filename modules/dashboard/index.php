@@ -13,10 +13,16 @@ $s = $pdo->prepare("SELECT COALESCE(SUM(genel_toplam),0) FROM satislar WHERE tar
 $s->execute([$bugun]); $gunlukSatis = $s->fetchColumn();
 $s = $pdo->prepare("SELECT COALESCE(SUM(genel_toplam),0) FROM satislar WHERE DATE_FORMAT(tarih,'%Y-%m')=? AND durum!='iptal'");
 $s->execute([$buAy]); $aylikSatis = $s->fetchColumn();
-$toplamMusteri = $pdo->query("SELECT COUNT(*) FROM musteriler")->fetchColumn();
-$toplamUrun    = $pdo->query("SELECT COUNT(*) FROM urunler WHERE aktif=1")->fetchColumn();
-$dusukStok     = $pdo->query("SELECT COUNT(*) FROM urunler WHERE stok_adedi <= min_stok AND aktif=1")->fetchColumn();
-$bekleyenOdeme = $pdo->query("SELECT COALESCE(SUM(kalan_tutar),0) FROM satislar WHERE kalan_tutar>0 AND durum='bekliyor'")->fetchColumn();
+$toplamMusteri  = $pdo->query("SELECT COUNT(*) FROM musteriler")->fetchColumn();
+$toplamUrun     = $pdo->query("SELECT COUNT(*) FROM urunler WHERE aktif=1")->fetchColumn();
+$dusukStok      = $pdo->query("SELECT COUNT(*) FROM urunler WHERE stok_adedi <= min_stok AND aktif=1")->fetchColumn();
+$bekleyenOdeme  = $pdo->query("SELECT COALESCE(SUM(kalan_tutar),0) FROM satislar WHERE kalan_tutar>0 AND durum='bekliyor'")->fetchColumn();
+$gecmisAy       = date('Y-m', strtotime('-1 month'));
+$s = $pdo->prepare("SELECT COALESCE(SUM(genel_toplam),0) FROM satislar WHERE DATE_FORMAT(tarih,'%Y-%m')=? AND durum!='iptal'");
+$s->execute([$gecmisAy]); $gecenAySatis = $s->fetchColumn();
+$buyume         = $gecenAySatis > 0 ? round(($aylikSatis - $gecenAySatis) / $gecenAySatis * 100, 1) : null;
+$gecmisKisat    = geckmisKisatSayisi();
+$bugunSatisAdet = (int)$pdo->prepare("SELECT COUNT(*) FROM satislar WHERE tarih=? AND durum!='iptal'")->execute([$bugun]) ? $pdo->query("SELECT COUNT(*) FROM satislar WHERE tarih='$bugun' AND durum!='iptal'")->fetchColumn() : 0;
 
 // Son satışlar
 $sonSatislar = $pdo->query("
@@ -77,6 +83,11 @@ require_once __DIR__ . '/../../includes/header.php';
                 <div>
                     <div class="text-muted small">Aylık Satış</div>
                     <div class="fw-bold fs-5"><?= para($aylikSatis) ?></div>
+                    <?php if ($buyume !== null): ?>
+                    <div class="small <?= $buyume>=0?'text-success':'text-danger' ?>">
+                        <?= $buyume>=0?'↑':'↓' ?> %<?= abs($buyume) ?> geçen aya göre
+                    </div>
+                    <?php endif; ?>
                 </div>
             </div>
         </div>
@@ -105,19 +116,29 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
-<div class="row g-3 mb-4">
+<?php if ($dusukStok > 0 || $gecmisKisat > 0): ?>
+<div class="row g-3 mb-3">
     <?php if ($dusukStok > 0): ?>
-    <div class="col-md-4">
-        <div class="card border-danger shadow-sm">
-            <div class="card-body">
-                <h6 class="text-danger"><i class="bi bi-exclamation-triangle-fill"></i> Düşük Stok Uyarısı</h6>
-                <p class="mb-2 fs-4 fw-bold text-danger"><?= $dusukStok ?> Ürün</p>
-                <a href="<?= BASE_URL ?>/modules/stok/dusuk.php" class="btn btn-sm btn-outline-danger">Görüntüle</a>
-            </div>
+    <div class="col-md-6">
+        <div class="alert alert-danger d-flex align-items-center gap-2 mb-0">
+            <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
+            <span><strong><?= $dusukStok ?> ürün</strong> kritik stok seviyesinde.</span>
+            <a href="<?= BASE_URL ?>/modules/stok/dusuk.php" class="btn btn-sm btn-danger ms-auto">Görüntüle</a>
+        </div>
+    </div>
+    <?php endif; ?>
+    <?php if ($gecmisKisat > 0): ?>
+    <div class="col-md-6">
+        <div class="alert alert-danger d-flex align-items-center gap-2 mb-0">
+            <i class="bi bi-calendar-x fs-5 flex-shrink-0"></i>
+            <span><strong><?= $gecmisKisat ?> taksit</strong> vadesi geçmiş.</span>
+            <a href="<?= BASE_URL ?>/modules/finans/taksit_takvimi.php?filtre=gecmis" class="btn btn-sm btn-danger ms-auto">Görüntüle</a>
         </div>
     </div>
     <?php endif; ?>
 </div>
+<?php endif; ?>
+
 
 <div class="row g-3">
     <!-- Grafik -->

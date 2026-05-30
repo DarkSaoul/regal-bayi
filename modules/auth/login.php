@@ -33,6 +33,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['ad_soyad']       = $kullanici['ad_soyad'];
             $_SESSION['rol']            = $kullanici['rol'];
             $_SESSION['son_aktivite']   = time();
+
+            logla('giris', 'auth', (int)$kullanici['id'], $kullanici['ad_soyad'] . ' giriş yaptı');
+            if ($kullanici['rol'] === 'yonetici') {
+                // Haftalık oto-yedek: son 7 günde alınmamışsa otomatik al
+                $sonOtoYedek = ayar('son_oto_yedek', '');
+                if (!$sonOtoYedek || (time() - strtotime($sonOtoYedek)) >= 7 * 86400) {
+                    otomatikYedekAl();
+                }
+                // Bugün henüz yedek alınmamışsa yedekleme sayfasına zorla
+                if (!bugunYedekVarMi()) {
+                    $_SESSION['yedek_gerekli'] = true;
+                    header('Location: ' . BASE_URL . '/modules/yedekleme/');
+                    exit;
+                }
+            }
+
             header('Location: ' . BASE_URL . '/modules/dashboard/');
             exit;
         }

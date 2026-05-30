@@ -20,9 +20,27 @@
         </a>
     </li>
     <li class="nav-item">
+        <a class="nav-link <?= navAktif('kategoriler') ?>"
+           href="<?= BASE_URL ?>/modules/kategoriler/">
+            <i class="bi bi-tags"></i><span>Kategoriler</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <?= navAktif('toplu_fiyat') ?>"
+           href="<?= BASE_URL ?>/modules/urunler/toplu_fiyat.php">
+            <i class="bi bi-percent"></i><span>Toplu Fiyat</span>
+        </a>
+    </li>
+    <li class="nav-item">
         <a class="nav-link <?= navAktif('stok') ?>"
            href="<?= BASE_URL ?>/modules/stok/">
             <i class="bi bi-archive"></i><span>Stok Takibi</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <?= navAktif('sayim') ?>"
+           href="<?= BASE_URL ?>/modules/stok/sayim.php">
+            <i class="bi bi-clipboard-check"></i><span>Stok Sayımı</span>
         </a>
     </li>
 
@@ -47,12 +65,30 @@
             <i class="bi bi-cash-stack"></i><span>Kasa & Finans</span>
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link <?= navAktif('taksit_takvimi') ?>"
+           href="<?= BASE_URL ?>/modules/finans/taksit_takvimi.php">
+            <i class="bi bi-calendar-week"></i><span>Taksit Takvimi</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <?= navAktif('kapanis') ?>"
+           href="<?= BASE_URL ?>/modules/finans/kapanis.php">
+            <i class="bi bi-door-closed"></i><span>Kasa Kapanışı</span>
+        </a>
+    </li>
 
     <li class="sidebar-section-title">Raporlar</li>
     <li class="nav-item">
         <a class="nav-link <?= navAktif('raporlar') ?>"
            href="<?= BASE_URL ?>/modules/raporlar/">
             <i class="bi bi-bar-chart-line"></i><span>Raporlar</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <?= navAktif('kar_zarar') ?>"
+           href="<?= BASE_URL ?>/modules/raporlar/kar_zarar.php">
+            <i class="bi bi-graph-up-arrow"></i><span>Kâr-Zarar</span>
         </a>
     </li>
 
@@ -68,6 +104,18 @@
         <a class="nav-link <?= navAktif('ayarlar') ?>"
            href="<?= BASE_URL ?>/modules/ayarlar/">
             <i class="bi bi-gear"></i><span>Ayarlar</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <?= navAktif('aktivite') ?>"
+           href="<?= BASE_URL ?>/modules/kullanicilar/aktivite.php">
+            <i class="bi bi-clock-history"></i><span>Aktivite Logu</span>
+        </a>
+    </li>
+    <li class="nav-item">
+        <a class="nav-link <?= navAktif('yedekleme') ?>"
+           href="<?= BASE_URL ?>/modules/yedekleme/">
+            <i class="bi bi-cloud-arrow-down"></i><span>Yedekleme</span>
         </a>
     </li>
     <?php endif; ?>

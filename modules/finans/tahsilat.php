@@ -7,13 +7,22 @@ $pdo = db();
 
 $satis_id = (int)($_GET['satis_id'] ?? 0);
 $satis = null;
+$musteri_id = 0;
 if ($satis_id) {
     $stmt = $pdo->prepare("SELECT s.*, CONCAT(m.ad,' ',COALESCE(m.soyad,'')) AS musteri_adi FROM satislar s LEFT JOIN musteriler m ON s.musteri_id=m.id WHERE s.id=?");
-    $stmt->execute([$satis_id]); $satis = $stmt->fetch();
+    $stmt->execute([$satis_id]);
+    $satis = $stmt->fetch();
+    $musteri_id = (int)($satis['musteri_id'] ?? 0);
 }
 
-// Vadeli satış arama
-$vadeli_satislar = $pdo->query("SELECT s.id, s.fatura_no, s.kalan_tutar, CONCAT(m.ad,' ',COALESCE(m.soyad,'')) AS musteri_adi FROM satislar s JOIN musteriler m ON s.musteri_id=m.id WHERE s.kalan_tutar>0 AND s.durum='bekliyor' ORDER BY s.tarih")->fetchAll();
+// Müşteri belirlenmişse sadece o müşterinin vadeli satışları
+if ($musteri_id) {
+    $stmt = $pdo->prepare("SELECT s.id, s.fatura_no, s.kalan_tutar, CONCAT(m.ad,' ',COALESCE(m.soyad,'')) AS musteri_adi FROM satislar s JOIN musteriler m ON s.musteri_id=m.id WHERE s.kalan_tutar>0 AND s.durum='bekliyor' AND s.musteri_id=? ORDER BY s.tarih");
+    $stmt->execute([$musteri_id]);
+    $vadeli_satislar = $stmt->fetchAll();
+} else {
+    $vadeli_satislar = $pdo->query("SELECT s.id, s.fatura_no, s.kalan_tutar, CONCAT(m.ad,' ',COALESCE(m.soyad,'')) AS musteri_adi FROM satislar s JOIN musteriler m ON s.musteri_id=m.id WHERE s.kalan_tutar>0 AND s.durum='bekliyor' ORDER BY s.tarih")->fetchAll();
+}
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrfVerify();
@@ -63,6 +72,17 @@ require_once __DIR__ . '/../../includes/header.php';
 <div class="page-header">
     <h4><i class="bi bi-cash-coin text-success"></i> Tahsilat Al</h4>
 </div>
+
+<?php if ($satis && $musteri_id): ?>
+<div class="alert alert-info d-flex align-items-center gap-2 mb-3" style="max-width:550px">
+    <i class="bi bi-person-fill fs-5"></i>
+    <span>
+        <strong><?= escH($satis['musteri_adi']) ?></strong> adına tahsilat —
+        yalnızca bu müşterinin vadeli satışları listeleniyor.
+    </span>
+</div>
+<?php endif; ?>
+
 <div class="card shadow-sm" style="max-width:550px">
     <div class="card-body">
     <form method="post">

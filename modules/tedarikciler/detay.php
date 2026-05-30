@@ -22,6 +22,24 @@ $hareketler = $pdo->prepare("
 $hareketler->execute([$id]);
 $hareketler = $hareketler->fetchAll();
 
+// Tedarikçi ödeme işlemi
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['odeme_yap'])) {
+    csrfVerify();
+    $tutar    = (float)$_POST['odeme_tutar'];
+    $tip      = $_POST['odeme_tipi'] ?? 'nakit';
+    $tarih    = $_POST['odeme_tarih'] ?: date('Y-m-d');
+    $aciklama = trim($_POST['odeme_aciklama'] ?? '');
+    if ($tutar > 0) {
+        $pdo->prepare("INSERT INTO tedarikci_odemeleri (tedarikci_id,tarih,tutar,odeme_tipi,aciklama,kullanici_id) VALUES (?,?,?,?,?,?)")
+            ->execute([$id, $tarih, $tutar, $tip, $aciklama ?: null, $_SESSION['kullanici_id']]);
+        $pdo->prepare("UPDATE tedarikciler SET toplam_borc = GREATEST(0, toplam_borc - ?) WHERE id=?")
+            ->execute([$tutar, $id]);
+        logla('tedarikci_odeme', 'tedarikciler', $id, para($tutar) . ' ödeme yapıldı');
+        flash('basari', para($tutar) . ' tedarikçi ödemesi kaydedildi.');
+    }
+    header('Location: detay.php?id=' . $id); exit;
+}
+
 // Özet istatistikler
 $istatistik = $pdo->prepare("
     SELECT
@@ -34,6 +52,11 @@ $istatistik = $pdo->prepare("
 ");
 $istatistik->execute([$id]);
 $ist = $istatistik->fetch();
+
+// Ödeme geçmişi
+$odemeler = $pdo->prepare("SELECT * FROM tedarikci_odemeleri WHERE tedarikci_id=? ORDER BY tarih DESC LIMIT 20");
+$odemeler->execute([$id]); $odemeler = $odemeler->fetchAll();
+$toplamOdenen = array_sum(array_column($odemeler, 'tutar'));
 
 // Tedarikçiden en çok gelen ürünler
 $enCokUrunler = $pdo->prepare("
@@ -108,6 +131,41 @@ require_once __DIR__ . '/../../includes/header.php';
                 <?php if ($t['notlar']): ?>
                 <div class="mt-2 p-2 bg-light rounded small">
                     <i class="bi bi-sticky text-warning"></i> <?= escH($t['notlar']) ?>
+                </div>
+                <?php endif; ?>
+            </div>
+        </div>
+
+        <!-- Borç Durumu -->
+        <div class="card shadow-sm mb-3 <?= $t['toplam_borc']>0?'border-danger':'' ?>">
+            <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-credit-card text-danger"></i> Borç Durumu</span>
+                <?php if ($t['toplam_borc']>0): ?>
+                <button class="btn btn-sm btn-success" data-bs-toggle="modal" data-bs-target="#odemeModal">
+                    <i class="bi bi-cash-coin"></i> Ödeme Yap
+                </button>
+                <?php endif; ?>
+            </div>
+            <div class="card-body p-0">
+                <table class="table table-sm mb-0">
+                    <tr>
+                        <td class="text-muted">Toplam Borç</td>
+                        <td class="fw-bold text-end <?= $t['toplam_borc']>0?'text-danger':'' ?>"><?= para($t['toplam_borc']) ?></td>
+                    </tr>
+                    <tr>
+                        <td class="text-muted">Toplam Ödenen</td>
+                        <td class="fw-bold text-end text-success"><?= para($toplamOdenen) ?></td>
+                    </tr>
+                </table>
+                <?php if (!empty($odemeler)): ?>
+                <div class="px-3 pb-2">
+                    <div class="small text-muted mt-2 mb-1">Son Ödemeler</div>
+                    <?php foreach (array_slice($odemeler,0,3) as $o): ?>
+                    <div class="d-flex justify-content-between small border-bottom py-1">
+                        <span><?= tarih($o['tarih']) ?> — <?= ucfirst($o['odeme_tipi']) ?></span>
+                        <span class="text-success fw-bold"><?= para($o['tutar']) ?></span>
+                    </div>
+                    <?php endforeach; ?>
                 </div>
                 <?php endif; ?>
             </div>
@@ -208,6 +266,55 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
             <?php endif; ?>
             </div>
+        </div>
+    </div>
+</div>
+
+<!-- Ödeme Modal -->
+<div class="modal fade" id="odemeModal" tabindex="-1">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content">
+            <form method="post">
+                <?= csrfField() ?>
+                <input type="hidden" name="odeme_yap" value="1">
+                <div class="modal-header">
+                    <h6 class="modal-title fw-bold"><i class="bi bi-cash-coin text-success"></i> Tedarikçi Ödemesi — <?= escH($t['ad']) ?></h6>
+                    <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+                </div>
+                <div class="modal-body">
+                    <div class="alert alert-warning py-2">
+                        Mevcut borç: <strong><?= para($t['toplam_borc']) ?></strong>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ödeme Tutarı <span class="text-danger">*</span></label>
+                        <div class="input-group">
+                            <input type="number" name="odeme_tutar" class="form-control" step="0.01" min="0.01"
+                                   value="<?= $t['toplam_borc'] ?>" required>
+                            <span class="input-group-text"><?= escH(ayar('para_sembol','₺')) ?></span>
+                        </div>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Ödeme Tipi</label>
+                        <select name="odeme_tipi" class="form-select">
+                            <option value="nakit">Nakit</option>
+                            <option value="havale">Havale / EFT</option>
+                            <option value="kredi_karti">Kredi Kartı</option>
+                        </select>
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Tarih</label>
+                        <input type="date" name="odeme_tarih" class="form-control" value="<?= date('Y-m-d') ?>">
+                    </div>
+                    <div class="mb-3">
+                        <label class="form-label fw-semibold">Açıklama</label>
+                        <input type="text" name="odeme_aciklama" class="form-control" placeholder="Fatura no, irsaliye no...">
+                    </div>
+                </div>
+                <div class="modal-footer">
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal">İptal</button>
+                    <button type="submit" class="btn btn-success"><i class="bi bi-check-circle"></i> Ödemeyi Kaydet</button>
+                </div>
+            </form>
         </div>
     </div>
 </div>

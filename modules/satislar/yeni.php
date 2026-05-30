@@ -88,7 +88,21 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 $pdo->prepare("UPDATE musteriler SET toplam_borc = toplam_borc + ? WHERE id=?")->execute([$kalan, $musteri]);
             }
 
+            // Taksit planı oluştur
+            if ($odeme_tipi === 'taksitli' && $taksit_sayisi > 1 && $genel > 0) {
+                $taksit_tutari = round($genel / $taksit_sayisi, 2);
+                $fark = round($genel - ($taksit_tutari * $taksit_sayisi), 2); // kuruş farkı son taksitte
+                for ($t = 1; $t <= $taksit_sayisi; $t++) {
+                    $vade = date('Y-m-d', strtotime("+{$t} month", strtotime($tarih)));
+                    $bu_tutar = ($t === $taksit_sayisi) ? round($taksit_tutari + $fark, 2) : $taksit_tutari;
+                    $odendi = ($t === 1 && $odenen >= $taksit_tutari) ? 1 : 0;
+                    $pdo->prepare("INSERT INTO taksit_plani (satis_id, taksit_no, tutar, vade_tarihi, odendi) VALUES (?,?,?,?,?)")
+                        ->execute([$satis_id, $t, $bu_tutar, $vade, $odendi]);
+                }
+            }
+
             $pdo->commit();
+            logla('satis_olustur', 'satislar', $satis_id, "Fatura: $fatura_no | " . para($genel));
             flash('basari', "Satış kaydedildi. Fatura: $fatura_no");
             header('Location: detay.php?id=' . $satis_id); exit;
         } catch (Exception $e) {

@@ -1,0 +1,5 @@
+# Kurulum tamamlandıktan sonra bu klasörü silin
+<Files "installed.lock">
+    Order Allow,Deny
+    Deny from all
+</Files>

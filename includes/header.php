@@ -1,8 +1,9 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 $mevcut_sayfa = basename(dirname($_SERVER['PHP_SELF']));
-$uyari_stok   = minStokUyarilari();
-$bekleyen_odeme = bekleyenTahsilat();
+$uyari_stok      = minStokUyarilari();
+$bekleyen_odeme  = bekleyenTahsilat();
+$geckmis_taksit  = geckmisKisatSayisi();
 
 // Tema rengi
 $_tema = ayar('tema_renk', 'primary');
@@ -99,6 +100,14 @@ function navAktif($sayfa) {
             <span class="d-none d-md-inline"><?= $bekleyen_odeme ?></span>
         </a>
         <?php endif; ?>
+        <?php if ($geckmis_taksit > 0): ?>
+        <a href="<?= BASE_URL ?>/modules/finans/taksit_takvimi.php?filtre=gecmis"
+           class="btn btn-sm btn-danger py-0 px-2 d-flex align-items-center gap-1"
+           title="Gecikmiş Taksit">
+            <i class="bi bi-calendar-x"></i>
+            <span class="d-none d-md-inline"><?= $geckmis_taksit ?></span>
+        </a>
+        <?php endif; ?>
     </div>
 
     <!-- Kullanıcı dropdown -->
@@ -112,6 +121,11 @@ function navAktif($sayfa) {
             <li><span class="dropdown-item-text fw-semibold"><?= escH($_SESSION['ad_soyad'] ?? '') ?></span></li>
             <li><span class="dropdown-item-text text-muted small"><?= escH($_SESSION['rol'] ?? '') ?></span></li>
             <li><hr class="dropdown-divider my-1"></li>
+            <li>
+                <a class="dropdown-item" href="<?= BASE_URL ?>/modules/kullanicilar/profil.php">
+                    <i class="bi bi-person-gear me-1"></i> Profilim
+                </a>
+            </li>
             <li>
                 <a class="dropdown-item text-danger" href="<?= BASE_URL ?>/modules/auth/logout.php">
                     <i class="bi bi-box-arrow-right me-1"></i> Çıkış Yap
@@ -143,3 +157,12 @@ function navAktif($sayfa) {
 <!-- Ana İçerik -->
 <main id="main-content" class="flex-grow-1">
     <?php showFlash(); ?>
+    <?php if (!empty($_SESSION['yedek_gerekli'])): ?>
+    <div class="alert alert-warning border-0 rounded-0 mb-0 d-flex align-items-center gap-2 px-3 py-2" role="alert">
+        <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
+        <span><strong>Bugün yedek alınmamış!</strong> Devam etmek için lütfen veritabanı yedeği alın.</span>
+        <a href="<?= BASE_URL ?>/modules/yedekleme/" class="btn btn-sm btn-warning ms-auto fw-semibold">
+            <i class="bi bi-cloud-arrow-down"></i> Şimdi Yedek Al
+        </a>
+    </div>
+    <?php endif; ?>

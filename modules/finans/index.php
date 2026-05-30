@@ -76,7 +76,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <div class="card-header bg-white fw-semibold">Son Kasa Hareketleri</div>
             <div class="card-body p-0">
             <table class="table table-hover table-sm mb-0">
-                <thead><tr><th>Tarih</th><th>Tip</th><th>Tutar</th><th>Kategori</th><th>Açıklama</th><th>Kullanıcı</th></tr></thead>
+                <thead><tr><th>Tarih</th><th>Tip</th><th>Tutar</th><th>Kategori</th><th>Açıklama</th><th>Kullanıcı</th><th></th></tr></thead>
                 <tbody>
                 <?php if (empty($hareketler)): ?>
                     <tr><td colspan="6" class="text-center text-muted py-3">Hareket yok</td></tr>
@@ -89,6 +89,18 @@ require_once __DIR__ . '/../../includes/header.php';
                     <td><?= escH($h['kategori']??'-') ?></td>
                     <td><?= escH($h['aciklama']??'-') ?></td>
                     <td><?= escH($h['kullanici']??'-') ?></td>
+                    <td>
+                        <?php if (!in_array($h['kategori'],['Satış','Tahsilat']) && ($_SESSION['rol']??'')==='yonetici'): ?>
+                        <form method="post" action="kasa_sil.php" class="d-inline"
+                              onsubmit="return confirm('Bu hareketi silmek istediğinize emin misiniz?')">
+                            <?= csrfField() ?>
+                            <input type="hidden" name="id" value="<?= $h['id'] ?>">
+                            <button type="submit" class="btn btn-xs btn-outline-danger btn-sm py-0 px-1">
+                                <i class="bi bi-trash"></i>
+                            </button>
+                        </form>
+                        <?php endif; ?>
+                    </td>
                 </tr>
                 <?php endforeach; ?>
                 <?php endif; ?>

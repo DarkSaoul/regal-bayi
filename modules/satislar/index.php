@@ -6,6 +6,32 @@ $sayfa_basligi = 'Satışlar';
 $pdo = db();
 
 $arama  = trim($_GET['ara'] ?? '');
+$bas    = $_GET['bas'] ?? date('Y-m-01');
+$bit    = $_GET['bit'] ?? date('Y-m-d');
+$durum  = $_GET['durum'] ?? '';
+
+if (isset($_GET['export']) && $_GET['export'] === 'csv') {
+    $where = "WHERE s.tarih BETWEEN ? AND ?";
+    $params = [$bas, $bit];
+    if ($arama) { $where .= " AND (s.fatura_no LIKE ? OR m.ad LIKE ? OR m.soyad LIKE ? OR m.firma_adi LIKE ?)"; $params = array_merge($params, array_fill(0,4,likeParam($arama))); }
+    if ($durum) { $where .= " AND s.durum=?"; $params[] = $durum; }
+    $stmt = $pdo->prepare("SELECT s.*, CONCAT(m.ad,' ',COALESCE(m.soyad,'')) AS musteri_adi FROM satislar s LEFT JOIN musteriler m ON s.musteri_id=m.id $where ORDER BY s.id DESC");
+    $stmt->execute($params);
+    $rows = $stmt->fetchAll();
+    header('Content-Type: text/csv; charset=UTF-8');
+    header('Content-Disposition: attachment; filename="satislar_' . date('Y-m-d') . '.csv"');
+    echo "\xEF\xBB\xBF";
+    $out = fopen('php://output','w');
+    fputcsv($out,['Fatura No','Müşteri','Tarih','Toplam','Ödenen','Kalan','Ödeme Tipi','Durum'],';');
+    foreach ($rows as $r) {
+        fputcsv($out,[$r['fatura_no'],$r['musteri_adi']?:'Perakende',$r['tarih'],
+            number_format($r['genel_toplam'],2,',','.'),
+            number_format($r['odenen_tutar'],2,',','.'),
+            number_format($r['kalan_tutar'],2,',','.'),
+            $r['odeme_tipi'],$r['durum']],';');
+    }
+    fclose($out); exit;
+}
 $durum  = $_GET['durum'] ?? '';
 $bas    = $_GET['bas'] ?? date('Y-m-01');
 $bit    = $_GET['bit'] ?? date('Y-m-d');
@@ -32,7 +58,11 @@ require_once __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-header d-flex justify-content-between align-items-center">
     <h4><i class="bi bi-receipt text-primary"></i> Satışlar</h4>
-    <a href="yeni.php" class="btn btn-primary"><i class="bi bi-plus-circle"></i> Yeni Satış</a>
+    <div class="d-flex gap-2">
+        <a href="?ara=<?= urlencode($arama) ?>&bas=<?= $bas ?>&bit=<?= $bit ?>&durum=<?= $durum ?>&export=csv"
+           class="btn btn-outline-success btn-sm"><i class="bi bi-filetype-csv"></i> CSV İndir</a>
+        <a href="yeni.php" class="btn btn-primary"><i class="bi bi-plus-circle"></i> Yeni Satış</a>
+    </div>
 </div>
 
 <!-- Özet -->

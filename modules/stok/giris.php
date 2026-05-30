@@ -11,14 +11,20 @@ $tedarikciler = $pdo->query("SELECT * FROM tedarikciler ORDER BY ad")->fetchAll(
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrfVerify();
-    $uid   = (int)$_POST['urun_id'];
-    $miktar = (int)$_POST['miktar'];
-    $belge = trim($_POST['belge_no'] ?? '');
-    $aciklama = trim($_POST['aciklama'] ?? '');
-    $tedarikci = (int)($_POST['tedarikci_id'] ?? 0) ?: null;
+    $uid          = (int)$_POST['urun_id'];
+    $miktar       = (int)$_POST['miktar'];
+    $belge        = trim($_POST['belge_no'] ?? '');
+    $aciklama     = trim($_POST['aciklama'] ?? '');
+    $tedarikci    = (int)($_POST['tedarikci_id'] ?? 0) ?: null;
+    $birim_maliyet = $_POST['birim_maliyet'] !== '' ? (float)$_POST['birim_maliyet'] : null;
 
     if ($uid > 0 && $miktar > 0) {
-        stokGuncelle($uid, $miktar, 'giris', $belge, $aciklama, $tedarikci);
+        stokGuncelle($uid, $miktar, 'giris', $belge, $aciklama, $tedarikci, $birim_maliyet);
+        if ($tedarikci && $birim_maliyet !== null && $birim_maliyet > 0) {
+            $toplam = round($miktar * $birim_maliyet, 2);
+            $pdo->prepare("UPDATE tedarikciler SET toplam_borc = toplam_borc + ? WHERE id=?")->execute([$toplam, $tedarikci]);
+        }
+        logla('stok_giris', 'stok', $uid, "$miktar adet stok girişi" . ($belge ? " | Belge: $belge" : ''));
 
         // Seri no girişleri
         $seri_nolar = array_filter(array_map('trim', explode("\n", $_POST['seri_nolar'] ?? '')));
@@ -80,6 +86,14 @@ require_once __DIR__ . '/../../includes/header.php';
                 <option value="<?= $t['id'] ?>" <?= $t['id']==$tedarikci_id?'selected':'' ?>><?= escH($t['ad']) ?></option>
                 <?php endforeach; ?>
             </select>
+        </div>
+        <div class="mb-3">
+            <label class="form-label fw-semibold">Alış / Birim Maliyet <small class="text-muted">(tedarikçi borcunu etkiler)</small></label>
+            <div class="input-group">
+                <input type="number" name="birim_maliyet" class="form-control" step="0.01" min="0"
+                       placeholder="0,00" value="<?= escH($_POST['birim_maliyet']??'') ?>">
+                <span class="input-group-text"><?= escH(ayar('para_sembol','₺')) ?></span>
+            </div>
         </div>
         <div class="mb-3">
             <label class="form-label fw-semibold">Belge / İrsaliye No</label>

@@ -14,6 +14,10 @@ $kalemler->execute([$id]); $kalemler = $kalemler->fetchAll();
 $odemeler = $pdo->prepare("SELECT * FROM odemeler WHERE satis_id=? ORDER BY tarih");
 $odemeler->execute([$id]); $odemeler = $odemeler->fetchAll();
 
+// Taksit planı
+$taksitPlani = $pdo->prepare("SELECT * FROM taksit_plani WHERE satis_id=? ORDER BY taksit_no");
+$taksitPlani->execute([$id]); $taksitPlani = $taksitPlani->fetchAll();
+
 // Taksit hesaplamaları
 $taksitli = $satis['odeme_tipi'] === 'taksitli' && $satis['taksit_sayisi'] > 1;
 $aylik_taksit  = $taksitli ? ($satis['genel_toplam'] / $satis['taksit_sayisi']) : 0;
@@ -38,7 +42,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <i class="bi bi-cash-coin"></i> Tahsilat Al
         </a>
         <?php endif; ?>
-        <button onclick="window.print()" class="btn btn-outline-secondary"><i class="bi bi-printer"></i> Yazdır</button>
+        <a href="yazdir.php?id=<?= $id ?>" target="_blank" class="btn btn-outline-secondary"><i class="bi bi-printer"></i> Fatura Yazdır</a>
         <a href="index.php" class="btn btn-outline-secondary">← Satışlar</a>
     </div>
 </div>
@@ -125,6 +129,43 @@ require_once __DIR__ . '/../../includes/header.php';
                 </div>
                 <?php if ($satis['notlar']): ?>
                 <div class="mt-2 p-2 bg-light rounded small">Not: <?= escH($satis['notlar']) ?></div>
+                <?php endif; ?>
+
+                <!-- Taksit Takvimi -->
+                <?php if (!empty($taksitPlani)): ?>
+                <div class="mt-3">
+                    <h6 class="fw-semibold"><i class="bi bi-calendar-week text-primary"></i> Taksit Ödeme Takvimi</h6>
+                    <div class="table-responsive">
+                    <table class="table table-bordered table-sm">
+                        <thead class="table-light">
+                            <tr><th>#</th><th>Vade Tarihi</th><th>Tutar</th><th>Durum</th><th>Ödeme Tarihi</th></tr>
+                        </thead>
+                        <tbody>
+                        <?php foreach ($taksitPlani as $tp):
+                            $gecmis = !$tp['odendi'] && strtotime($tp['vade_tarihi']) < time();
+                        ?>
+                        <tr class="<?= $gecmis ? 'table-danger' : ($tp['odendi'] ? 'table-success' : '') ?>">
+                            <td><?= $tp['taksit_no'] ?>.</td>
+                            <td><?= tarih($tp['vade_tarihi']) ?>
+                                <?php if ($gecmis): ?><span class="badge bg-danger ms-1">Gecikmiş</span><?php endif; ?>
+                            </td>
+                            <td class="fw-bold"><?= para($tp['tutar']) ?></td>
+                            <td>
+                                <?php if ($tp['odendi']): ?>
+                                    <span class="badge bg-success">Ödendi ✓</span>
+                                <?php elseif ($gecmis): ?>
+                                    <span class="badge bg-danger">Bekliyor</span>
+                                <?php else: ?>
+                                    <span class="badge bg-warning text-dark">Bekliyor</span>
+                                <?php endif; ?>
+                            </td>
+                            <td><?= $tp['odeme_tarihi'] ? tarih($tp['odeme_tarihi']) : '-' ?></td>
+                        </tr>
+                        <?php endforeach; ?>
+                        </tbody>
+                    </table>
+                    </div>
+                </div>
                 <?php endif; ?>
             </div>
         </div>

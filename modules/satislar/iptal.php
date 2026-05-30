@@ -27,6 +27,7 @@ try {
             ->execute([$satis['kalan_tutar'], $satis['musteri_id']]);
     }
     $pdo->commit();
+    logla('satis_iptal', 'satislar', $id, 'Fatura: ' . $satis['fatura_no']);
     flash('basari', 'Satış iptal edildi, stok iade edildi.');
 } catch (Exception $e) {
     $pdo->rollBack();
