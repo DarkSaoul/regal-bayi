@@ -11,24 +11,40 @@ $arama       = trim($_GET['ara'] ?? '');
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrfVerify();
     $aciklama = trim($_POST['sayim_aciklama'] ?? 'Stok sayımı');
+    $miktarlar = $_POST['sayim_miktar'] ?? [];
     $guncellenen = 0;
 
-    foreach ($_POST['sayim_miktar'] as $urun_id => $yeni_miktar) {
-        $urun_id    = (int)$urun_id;
-        $yeni_miktar = (int)$yeni_miktar;
-        if ($yeni_miktar < 0) continue;
+    if (!is_array($miktarlar) || empty($miktarlar)) {
+        flash('hata', 'Sayım verisi bulunamadı.');
+        header('Location: sayim.php'); exit;
+    }
 
-        $stmt = $pdo->prepare("SELECT stok_adedi FROM urunler WHERE id=?");
-        $stmt->execute([$urun_id]);
-        $mevcut = (int)$stmt->fetchColumn();
+    $pdo->beginTransaction();
+    try {
+        foreach ($miktarlar as $urun_id => $yeni_miktar) {
+            $urun_id    = (int)$urun_id;
+            $yeni_miktar = (int)$yeni_miktar;
+            if ($yeni_miktar < 0) continue;
 
-        if ($mevcut === $yeni_miktar) continue; // Değişiklik yok
+            $stmt = $pdo->prepare("SELECT stok_adedi FROM urunler WHERE id=? FOR UPDATE");
+            $stmt->execute([$urun_id]);
+            $mevcut = $stmt->fetchColumn();
+            if ($mevcut === false) continue; // ürün yok
+            $mevcut = (int)$mevcut;
 
-        $fark = $yeni_miktar - $mevcut;
-        $pdo->prepare("UPDATE urunler SET stok_adedi=? WHERE id=?")->execute([$yeni_miktar, $urun_id]);
-        $pdo->prepare("INSERT INTO stok_hareketleri (urun_id,hareket_tipi,miktar,onceki_stok,sonraki_stok,aciklama,kullanici_id) VALUES (?,?,?,?,?,?,?)")
-            ->execute([$urun_id, 'sayim_duzeltme', abs($fark), $mevcut, $yeni_miktar, $aciklama, $_SESSION['kullanici_id']]);
-        $guncellenen++;
+            if ($mevcut === $yeni_miktar) continue; // Değişiklik yok
+
+            $fark = $yeni_miktar - $mevcut;
+            $pdo->prepare("UPDATE urunler SET stok_adedi=? WHERE id=?")->execute([$yeni_miktar, $urun_id]);
+            $pdo->prepare("INSERT INTO stok_hareketleri (urun_id,hareket_tipi,miktar,onceki_stok,sonraki_stok,aciklama,kullanici_id) VALUES (?,?,?,?,?,?,?)")
+                ->execute([$urun_id, 'sayim_duzeltme', abs($fark), $mevcut, $yeni_miktar, $aciklama, $_SESSION['kullanici_id']]);
+            $guncellenen++;
+        }
+        $pdo->commit();
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        flash('hata', 'Sayım kaydı sırasında hata: ' . $e->getMessage());
+        header('Location: sayim.php'); exit;
     }
 
     logla('stok_sayim', 'stok', 0, "$guncellenen ürün güncellendi | $aciklama");

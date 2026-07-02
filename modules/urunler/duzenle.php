@@ -14,20 +14,32 @@ $kategoriler = $pdo->query("SELECT * FROM kategoriler ORDER BY ust_id, ad")->fet
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrfVerify();
     $d = $_POST;
-    try {
-        $pdo->prepare("UPDATE urunler SET barkod=?,ad=?,kategori_id=?,marka=?,model=?,renk=?,aciklama=?,
-            alis_fiyati=?,satis_fiyati=?,kdv_orani=?,min_stok=?,seri_no_takip=? WHERE id=?")
-            ->execute([
-                $d['barkod']??'', $d['ad'], $d['kategori_id']?:null, $d['marka']?:'Regal',
-                $d['model']??'', $d['renk']??'', $d['aciklama']??'',
-                $d['alis_fiyati']??0, $d['satis_fiyati']??0,
-                $d['kdv_orani']??20, $d['min_stok']??1, isset($d['seri_no_takip'])?1:0, $id
-            ]);
-        flash('basari', "Ürün güncellendi.");
-        header('Location: index.php'); exit;
-    } catch (Exception $e) {
-        error_log($e->getMessage());
-        $hata = 'İşlem sırasında bir hata oluştu.';
+    $barkod = trim($d['barkod'] ?? '');
+    // Aynı barkod başka bir üründe olamaz
+    if ($barkod) {
+        $bk = $pdo->prepare("SELECT kod FROM urunler WHERE barkod=? AND id!=? LIMIT 1");
+        $bk->execute([$barkod, $id]);
+        if ($mevcutKod = $bk->fetchColumn()) {
+            $hata = "Bu barkod zaten \"$mevcutKod\" kodlu üründe kayıtlı.";
+        }
+    }
+    if (empty($hata)) {
+        try {
+            $pdo->prepare("UPDATE urunler SET barkod=?,ad=?,kategori_id=?,marka=?,model=?,renk=?,aciklama=?,
+                alis_fiyati=?,satis_fiyati=?,kdv_orani=?,min_stok=?,seri_no_takip=? WHERE id=?")
+                ->execute([
+                    $barkod, $d['ad'], $d['kategori_id']?:null, $d['marka']?:'Regal',
+                    $d['model']??'', $d['renk']??'', $d['aciklama']??'',
+                    max(0, (float)($d['alis_fiyati']??0)), max(0, (float)($d['satis_fiyati']??0)),
+                    min(100, max(0, (float)($d['kdv_orani']??20))), max(0, (int)($d['min_stok']??1)),
+                    isset($d['seri_no_takip'])?1:0, $id
+                ]);
+            flash('basari', "Ürün güncellendi.");
+            header('Location: index.php'); exit;
+        } catch (Exception $e) {
+            error_log($e->getMessage());
+            $hata = 'İşlem sırasında bir hata oluştu.';
+        }
     }
 }
 $d = $_SERVER['REQUEST_METHOD']==='POST' ? $_POST : $urun;

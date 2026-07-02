@@ -63,7 +63,7 @@ $gecmisAy      = date('Y-m', strtotime('-1 month'));
 $s = $pdo->prepare("SELECT COALESCE(SUM(genel_toplam),0) FROM satislar WHERE DATE_FORMAT(tarih,'%Y-%m')=? AND durum!='iptal'");
 $s->execute([$gecmisAy]); $gecenAySatis = $s->fetchColumn();
 $buyume      = $gecenAySatis > 0 ? round(($aylikSatis - $gecenAySatis) / $gecenAySatis * 100, 1) : null;
-$gecmisKisat = geckmisKisatSayisi();
+$gecmisKisat = gecikmisTaksitSayisi();
 
 $sonSatislar = $pdo->query("
     SELECT s.*, CONCAT(m.ad,' ',COALESCE(m.soyad,'')) AS musteri_adi

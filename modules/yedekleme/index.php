@@ -18,7 +18,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $hedef    = $yedekDir . $dosyaAdi;
 
         $mysqldump = '/opt/lampp/bin/mysqldump';
-        $cmd = escapeshellcmd($mysqldump) . ' -u ' . escapeshellarg(DB_USER) . ' ' . escapeshellarg(DB_NAME) . ' > ' . escapeshellarg($hedef) . ' 2>&1';
+        $cmd = escapeshellcmd($mysqldump)
+             . ' -u ' . escapeshellarg(DB_USER)
+             . (DB_PASS !== '' ? ' -p' . escapeshellarg(DB_PASS) : '')
+             . ' ' . escapeshellarg(DB_NAME) . ' > ' . escapeshellarg($hedef) . ' 2>&1';
         exec($cmd, $output, $kod);
 
         if ($kod === 0 && file_exists($hedef)) {

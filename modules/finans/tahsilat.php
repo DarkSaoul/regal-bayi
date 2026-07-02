@@ -1,7 +1,7 @@
 <?php
 define('BASE_URL', '/regal');
 require_once __DIR__ . '/../../includes/functions.php';
-auth();
+auth(); yetki(['yonetici','kasiyer']);
 $sayfa_basligi = 'Tahsilat Al';
 $pdo = db();
 
@@ -28,44 +28,75 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrfVerify();
     $sid    = (int)$_POST['satis_id'];
     $tutar  = (float)$_POST['tutar'];
-    $tip    = $_POST['odeme_tipi'] ?? 'nakit';
-    $tarih  = $_POST['tarih'] ?: date('Y-m-d');
+    $tip    = in_array($_POST['odeme_tipi'] ?? '', ['nakit','kredi_karti','havale']) ? $_POST['odeme_tipi'] : 'nakit';
+    $tarih  = $_POST['tarih'] ?? '';
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tarih) || strtotime($tarih) === false) $tarih = date('Y-m-d');
     $aciklama = trim($_POST['aciklama'] ?? '');
 
-    $satisRow = $pdo->prepare("SELECT * FROM satislar WHERE id=?");
-    $satisRow->execute([$sid]); $satisRow = $satisRow->fetch();
+    $pdo->beginTransaction();
+    try {
+        // Satırı kilitle — eşzamanlı çift tahsilat önlenir
+        $satisRow = $pdo->prepare("SELECT * FROM satislar WHERE id=? FOR UPDATE");
+        $satisRow->execute([$sid]); $satisRow = $satisRow->fetch();
 
-    if ($satisRow && $tutar > 0) {
-        $pdo->beginTransaction();
-
-        // Taksitli satışsa bir sonraki taksit numarasını bul
-        $taksit_no = null;
-        if ($satisRow['odeme_tipi'] === 'taksitli' && $satisRow['taksit_sayisi'] > 1) {
-            $stmt = $pdo->prepare("SELECT COUNT(*) FROM odemeler WHERE satis_id=? AND taksit_no IS NOT NULL");
-            $stmt->execute([$sid]);
-            $taksit_no = (int)$stmt->fetchColumn() + 1;
+        if (!$satisRow || $tutar <= 0) {
+            throw new RuntimeException('Geçersiz veri.');
+        }
+        if ($satisRow['durum'] !== 'bekliyor' || $satisRow['kalan_tutar'] <= 0) {
+            throw new RuntimeException('Bu satış için tahsilat alınamaz (iptal edilmiş veya tamamlanmış).');
         }
 
-        $pdo->prepare("INSERT INTO odemeler (satis_id,musteri_id,tarih,tutar,odeme_tipi,taksit_no,aciklama,kullanici_id) VALUES (?,?,?,?,?,?,?,?)")
-            ->execute([$sid, $satisRow['musteri_id'], $tarih, $tutar, $tip, $taksit_no, $aciklama ?: 'Tahsilat - '.$satisRow['fatura_no'], $_SESSION['kullanici_id']]);
-        // Fazla ödeme yapılmasını önle
-        $gercek_tutar = min($tutar, $satisRow['kalan_tutar']);
-        $yeni_kalan   = round(max(0, $satisRow['kalan_tutar'] - $tutar), 2);
-        $yeni_odenen  = round($satisRow['odenen_tutar'] + $tutar, 2);
-        $yeni_durum   = $yeni_kalan <= 0 ? 'tamamlandi' : 'bekliyor';
-        $pdo->prepare("UPDATE satislar SET odenen_tutar=?, kalan_tutar=?, durum=? WHERE id=?")->execute([$yeni_odenen, $yeni_kalan, $yeni_durum, $sid]);
-        // Borçtan yalnızca gerçekten kalan kadarını düş, negatife izin verme
-        if ($satisRow['musteri_id'] && $gercek_tutar > 0) {
-            $pdo->prepare("UPDATE musteriler SET toplam_borc = GREATEST(0, toplam_borc - ?) WHERE id=?")
-                ->execute([$gercek_tutar, $satisRow['musteri_id']]);
+        // Fazla ödeme kabul edilmez — kalanın üzeri para üstüdür, kayda girmez
+        $tutar = min(round($tutar, 2), (float)$satisRow['kalan_tutar']);
+
+        $pdo->prepare("INSERT INTO odemeler (satis_id,musteri_id,tarih,tutar,odeme_tipi,taksit_no,aciklama,kullanici_id) VALUES (?,?,?,?,?,NULL,?,?)")
+            ->execute([$sid, $satisRow['musteri_id'], $tarih, $tutar, $tip, $aciklama ?: 'Tahsilat - '.$satisRow['fatura_no'], $_SESSION['kullanici_id']]);
+        $odeme_id = (int)$pdo->lastInsertId();
+
+        $yeni_kalan  = round(max(0, $satisRow['kalan_tutar'] - $tutar), 2);
+        $yeni_odenen = round($satisRow['odenen_tutar'] + $tutar, 2);
+        $yeni_durum  = $yeni_kalan <= 0 ? 'tamamlandi' : 'bekliyor';
+        $pdo->prepare("UPDATE satislar SET odenen_tutar=?, kalan_tutar=?, durum=? WHERE id=?")
+            ->execute([$yeni_odenen, $yeni_kalan, $yeni_durum, $sid]);
+
+        // Taksit planını güncelle: ödeme, açık taksitleri vade sırasıyla kapatır
+        $son_taksit_no = null;
+        $acikTaksitler = $pdo->prepare("SELECT id, taksit_no, tutar FROM taksit_plani WHERE satis_id=? AND odendi=0 ORDER BY taksit_no FOR UPDATE");
+        $acikTaksitler->execute([$sid]);
+        $kalanOdeme = $tutar;
+        foreach ($acikTaksitler->fetchAll() as $tp) {
+            if ($kalanOdeme < $tp['tutar'] - 0.005) break;
+            $pdo->prepare("UPDATE taksit_plani SET odendi=1, odeme_tarihi=?, odeme_id=? WHERE id=?")
+                ->execute([$tarih, $odeme_id, $tp['id']]);
+            $kalanOdeme = round($kalanOdeme - $tp['tutar'], 2);
+            $son_taksit_no = (int)$tp['taksit_no'];
         }
-        $pdo->prepare("INSERT INTO kasa_hareketleri (tarih,tip,tutar,aciklama,kategori,kullanici_id) VALUES (?,?,?,?,?,?)")
-            ->execute([$tarih, 'giris', $tutar, 'Tahsilat: '.$satisRow['fatura_no'], 'Tahsilat', $_SESSION['kullanici_id']]);
+        // Ödemeyi kapattığı son taksit numarasıyla ilişkilendir
+        if ($son_taksit_no !== null) {
+            $pdo->prepare("UPDATE odemeler SET taksit_no=? WHERE id=?")->execute([$son_taksit_no, $odeme_id]);
+        }
+
+        // Müşteri borcunu açık satışlardan yeniden hesapla
+        musteriBorcuYenile($satisRow['musteri_id'] ? (int)$satisRow['musteri_id'] : null);
+
+        // Kasa = fiziksel nakit çekmecesi; yalnızca nakit tahsilat işlenir
+        if ($tip === 'nakit') {
+            $pdo->prepare("INSERT INTO kasa_hareketleri (tarih,tip,tutar,aciklama,kategori,odeme_id,kullanici_id) VALUES (?,?,?,?,?,?,?)")
+                ->execute([$tarih, 'giris', $tutar, 'Tahsilat: '.$satisRow['fatura_no'], 'Tahsilat', $odeme_id, $_SESSION['kullanici_id']]);
+        }
         $pdo->commit();
+        logla('tahsilat', 'finans', $sid, 'Fatura: '.$satisRow['fatura_no'].' | '.para($tutar));
         flash('basari', para($tutar) . ' tahsilat alındı.');
         header('Location: ' . BASE_URL . '/modules/satislar/detay.php?id=' . $sid); exit;
+    } catch (RuntimeException $e) {
+        $pdo->rollBack();
+        flash('hata', $e->getMessage());
+        header('Location: index.php'); exit;
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        flash('hata', 'Tahsilat sırasında hata: ' . $e->getMessage());
+        header('Location: index.php'); exit;
     }
-    flash('hata', 'Geçersiz veri.'); header('Location: index.php'); exit;
 }
 require_once __DIR__ . '/../../includes/header.php';
 ?>
@@ -101,6 +132,7 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="mb-3">
             <label class="form-label fw-semibold">Tahsilat Tutarı (₺) <span class="text-danger">*</span></label>
             <input type="number" name="tutar" class="form-control" step="0.01" min="0.01" required
+                   <?= $satis ? 'max="' . $satis['kalan_tutar'] . '"' : '' ?>
                    value="<?= $satis ? $satis['kalan_tutar'] : '' ?>">
             <?php if ($satis): ?>
             <div class="form-text">Maksimum: <?= para($satis['kalan_tutar']) ?></div>

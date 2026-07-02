@@ -7,8 +7,9 @@ $pdo = db();
 $id = (int)($_POST['id'] ?? 0);
 $pdo->beginTransaction();
 try {
-    // FOR UPDATE ile satırı kilitle — çift iptal önleme
-    $satis = $pdo->prepare("SELECT * FROM satislar WHERE id=? AND durum='tamamlandi' FOR UPDATE");
+    // FOR UPDATE ile satırı kilitle — çift iptal önleme.
+    // Hem tamamlanmış hem bekleyen (vadeli/taksitli) satışlar iptal edilebilir.
+    $satis = $pdo->prepare("SELECT * FROM satislar WHERE id=? AND durum IN ('tamamlandi','bekliyor') FOR UPDATE");
     $satis->execute([$id]); $satis = $satis->fetch();
     if (!$satis) {
         $pdo->rollBack();
@@ -20,15 +21,30 @@ try {
     foreach ($kalemler as $k) {
         stokGuncelle($k['urun_id'], $k['miktar'], 'iade_giris', $satis['fatura_no'], 'İptal iadesi');
     }
+    // Satılmış seri no'ları depoya geri al
+    $pdo->prepare("UPDATE seri_numaralari SET durum='stokta', satis_id=NULL WHERE satis_id=? AND durum='satildi'")
+        ->execute([$id]);
+
     $pdo->prepare("UPDATE satislar SET durum='iptal' WHERE id=?")->execute([$id]);
-    // Müşteri borcundan kalan tutarı düş
-    if ($satis['musteri_id'] && $satis['kalan_tutar'] > 0) {
-        $pdo->prepare("UPDATE musteriler SET toplam_borc = GREATEST(0, toplam_borc - ?) WHERE id=?")
-            ->execute([$satis['kalan_tutar'], $satis['musteri_id']]);
+
+    // Ödenmemiş taksitleri iptal et (planı sil) — gecikmiş taksit sayaçlarını kirletmesin
+    $pdo->prepare("DELETE FROM taksit_plani WHERE satis_id=? AND odendi=0")->execute([$id]);
+
+    // Müşteriye/nakite iade: ödenen tutar varsa kasadan çıkış yaz
+    if ($satis['odenen_tutar'] > 0) {
+        $pdo->prepare("INSERT INTO kasa_hareketleri (tarih,tip,tutar,aciklama,kategori,kullanici_id) VALUES (?,?,?,?,?,?)")
+            ->execute([date('Y-m-d'), 'cikis', $satis['odenen_tutar'],
+                       'Satış iptali iadesi: ' . $satis['fatura_no'], 'İade', $_SESSION['kullanici_id']]);
     }
+
+    // Müşteri borcunu açık satışlardan yeniden hesapla
+    musteriBorcuYenile($satis['musteri_id'] ? (int)$satis['musteri_id'] : null);
+
     $pdo->commit();
-    logla('satis_iptal', 'satislar', $id, 'Fatura: ' . $satis['fatura_no']);
-    flash('basari', 'Satış iptal edildi, stok iade edildi.');
+    logla('satis_iptal', 'satislar', $id, 'Fatura: ' . $satis['fatura_no']
+        . ($satis['odenen_tutar'] > 0 ? ' | İade: ' . para($satis['odenen_tutar']) : ''));
+    flash('basari', 'Satış iptal edildi, stok iade edildi.'
+        . ($satis['odenen_tutar'] > 0 ? ' Kasadan ' . para($satis['odenen_tutar']) . ' iade çıkışı yazıldı.' : ''));
 } catch (Exception $e) {
     $pdo->rollBack();
     flash('hata', 'İptal sırasında hata: ' . $e->getMessage());

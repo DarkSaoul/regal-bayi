@@ -55,6 +55,7 @@ CREATE TABLE urunler (
     kdv_orani DECIMAL(5,2) DEFAULT 20,
     garanti_suresi INT DEFAULT 24 COMMENT 'ay cinsinden',
     stok_adedi INT DEFAULT 0,
+    tesir_adedi INT DEFAULT 0,
     min_stok INT DEFAULT 1,
     seri_no_takip TINYINT(1) DEFAULT 0,
     aktif TINYINT(1) DEFAULT 1,
@@ -67,7 +68,7 @@ CREATE TABLE seri_numaralari (
     id INT AUTO_INCREMENT PRIMARY KEY,
     urun_id INT NOT NULL,
     seri_no VARCHAR(100) NOT NULL,
-    durum ENUM('stokta','satildi','ariza','iade') DEFAULT 'stokta',
+    durum ENUM('stokta','satildi','ariza','iade','tesirde') DEFAULT 'stokta',
     satis_id INT DEFAULT NULL,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (urun_id) REFERENCES urunler(id)
@@ -144,6 +145,7 @@ CREATE TABLE satis_kalemleri (
     kdv_tutar DECIMAL(10,2) DEFAULT 0,
     indirim DECIMAL(10,2) DEFAULT 0,
     toplam DECIMAL(10,2) NOT NULL,
+    tesir_satis TINYINT(1) DEFAULT 0,
     FOREIGN KEY (satis_id) REFERENCES satislar(id) ON DELETE CASCADE,
     FOREIGN KEY (urun_id) REFERENCES urunler(id),
     FOREIGN KEY (seri_no_id) REFERENCES seri_numaralari(id) ON DELETE SET NULL
@@ -166,6 +168,21 @@ CREATE TABLE odemeler (
     FOREIGN KEY (kullanici_id) REFERENCES kullanicilar(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 
+-- Taksit Planı
+CREATE TABLE taksit_plani (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    satis_id INT NOT NULL,
+    taksit_no INT NOT NULL,
+    tutar DECIMAL(10,2) NOT NULL,
+    vade_tarihi DATE NOT NULL,
+    odendi TINYINT(1) DEFAULT 0,
+    odeme_tarihi DATE DEFAULT NULL,
+    odeme_id INT DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (satis_id) REFERENCES satislar(id) ON DELETE CASCADE,
+    FOREIGN KEY (odeme_id) REFERENCES odemeler(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
 -- Kasa Hareketleri
 CREATE TABLE kasa_hareketleri (
     id INT AUTO_INCREMENT PRIMARY KEY,
@@ -178,6 +195,20 @@ CREATE TABLE kasa_hareketleri (
     kullanici_id INT,
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (odeme_id) REFERENCES odemeler(id) ON DELETE SET NULL,
+    FOREIGN KEY (kullanici_id) REFERENCES kullanicilar(id) ON DELETE SET NULL
+) ENGINE=InnoDB;
+
+-- Aktivite Logları (brute-force koruması da bu tabloyu kullanır)
+CREATE TABLE aktivite_loglari (
+    id INT AUTO_INCREMENT PRIMARY KEY,
+    kullanici_id INT DEFAULT NULL,
+    aksiyon VARCHAR(100) NOT NULL,
+    modul VARCHAR(50) DEFAULT NULL,
+    hedef_id INT DEFAULT NULL,
+    detay VARCHAR(500) DEFAULT NULL,
+    ip_adresi VARCHAR(45) DEFAULT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+    KEY idx_created (created_at),
     FOREIGN KEY (kullanici_id) REFERENCES kullanicilar(id) ON DELETE SET NULL
 ) ENGINE=InnoDB;
 

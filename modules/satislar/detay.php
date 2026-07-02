@@ -23,9 +23,8 @@ $taksitPlani->execute([$id]); $taksitPlani = $taksitPlani->fetchAll();
 $taksitli = $satis['odeme_tipi'] === 'taksitli' && $satis['taksit_sayisi'] > 1;
 $aylik_taksit  = $taksitli ? ($satis['genel_toplam'] / $satis['taksit_sayisi']) : 0;
 if ($taksitli) {
-    $stmt = $pdo->prepare("SELECT COUNT(*) FROM odemeler WHERE satis_id=? AND taksit_no IS NOT NULL");
-    $stmt->execute([$id]);
-    $odenen_taksit = (int)$stmt->fetchColumn();
+    // Ödenen taksit sayısı doğrudan plandan okunur
+    $odenen_taksit = count(array_filter($taksitPlani, fn($t) => $t['odendi']));
 }
 $kalan_taksit  = $taksitli ? ($satis['taksit_sayisi'] - $odenen_taksit) : 0;
 $taksit_ilerleme = $taksitli && $satis['taksit_sayisi'] > 0
@@ -287,8 +286,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <?= csrfField() ?>
             <input type="hidden" name="id" value="<?= $id ?>">
             <button type="submit" class="btn btn-outline-danger w-100"
-                onclick="return confirm('Bu satışı iptal etmek istediğinize emin misiniz? Stok iadesi yapılacak.')"
-                <?= $satis['durum']==='tamamlandi'?'':'disabled' ?>>
+                onclick="return confirm('Bu satışı iptal etmek istediğinize emin misiniz? Stok iadesi yapılacak<?= $satis['odenen_tutar']>0 ? ' ve ödenen tutar kasadan iade edilecek' : '' ?>.')">
                 <i class="bi bi-x-circle"></i> Satışı İptal Et
             </button>
         </form>

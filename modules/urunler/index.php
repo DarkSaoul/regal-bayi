@@ -94,10 +94,14 @@ require_once __DIR__ . '/../../includes/header.php';
                     <a href="<?= BASE_URL ?>/modules/stok/giris.php?urun_id=<?= $u['id'] ?>" class="btn btn-sm btn-outline-success" title="Stok Giriş">
                         <i class="bi bi-plus"></i>
                     </a>
-                    <a href="sil.php?id=<?= $u['id'] ?>" class="btn btn-sm btn-outline-danger"
-                       onclick="return confirm('Bu ürünü silmek istediğinize emin misiniz?')" title="Sil">
-                        <i class="bi bi-trash"></i>
-                    </a>
+                    <form method="post" action="sil.php" class="d-inline"
+                          onsubmit="return confirm('Bu ürünü silmek istediğinize emin misiniz?')">
+                        <?= csrfField() ?>
+                        <input type="hidden" name="id" value="<?= $u['id'] ?>">
+                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Sil">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </form>
                 </td>
             </tr>
             <?php endforeach; ?>

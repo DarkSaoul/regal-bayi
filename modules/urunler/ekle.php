@@ -20,19 +20,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $var->execute([$kod]);
         } while ((int)$var->fetchColumn() > 0);
     }
-    try {
-        $pdo->prepare("INSERT INTO urunler (kod,barkod,ad,kategori_id,marka,model,renk,aciklama,alis_fiyati,satis_fiyati,kdv_orani,min_stok,seri_no_takip)
-            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
-            ->execute([
-                $kod, $d['barkod']??'', $d['ad'], $d['kategori_id']?:null, $d['marka']?:'Regal',
-                $d['model']??'', $d['renk']??'', $d['aciklama']??'',
-                $d['alis_fiyati']??0, $d['satis_fiyati']??0,
-                $d['kdv_orani']??20, $d['min_stok']??1, isset($d['seri_no_takip'])?1:0
-            ]);
-        flash('basari', "\"$kod - {$d['ad']}\" ürünü eklendi.");
-        header('Location: index.php'); exit;
-    } catch (Exception $e) {
-        $hata = $e->getMessage();
+    $barkod = trim($d['barkod'] ?? '');
+    // Aynı barkod iki üründe olamaz — satış ekranı barkodla ilk bulduğunu ekler
+    if ($barkod) {
+        $bk = $pdo->prepare("SELECT kod FROM urunler WHERE barkod=? LIMIT 1");
+        $bk->execute([$barkod]);
+        if ($mevcutKod = $bk->fetchColumn()) {
+            $hata = "Bu barkod zaten \"$mevcutKod\" kodlu üründe kayıtlı.";
+        }
+    }
+    if (empty($hata)) {
+        try {
+            $pdo->prepare("INSERT INTO urunler (kod,barkod,ad,kategori_id,marka,model,renk,aciklama,alis_fiyati,satis_fiyati,kdv_orani,min_stok,seri_no_takip)
+                VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+                ->execute([
+                    $kod, $barkod, $d['ad'], $d['kategori_id']?:null, $d['marka']?:'Regal',
+                    $d['model']??'', $d['renk']??'', $d['aciklama']??'',
+                    max(0, (float)($d['alis_fiyati']??0)), max(0, (float)($d['satis_fiyati']??0)),
+                    min(100, max(0, (float)($d['kdv_orani']??20))), max(0, (int)($d['min_stok']??1)),
+                    isset($d['seri_no_takip'])?1:0
+                ]);
+            flash('basari', "\"$kod - {$d['ad']}\" ürünü eklendi.");
+            header('Location: index.php'); exit;
+        } catch (Exception $e) {
+            $hata = $e->getMessage();
+        }
     }
 }
 require_once __DIR__ . '/../../includes/header.php';

@@ -78,7 +78,7 @@ require_once __DIR__ . '/../../includes/header.php';
     <div class="col-md-3">
         <div class="card shadow-sm border-0 bg-success text-white">
             <div class="card-body text-center">
-                <div class="small opacity-75">Kasa Girişi</div>
+                <div class="small opacity-75">Kasa Girişi (Nakit)</div>
                 <div class="fw-bold fs-4"><?= para($kasaGiris) ?></div>
             </div>
         </div>
@@ -94,7 +94,7 @@ require_once __DIR__ . '/../../includes/header.php';
     <div class="col-md-3">
         <div class="card shadow-sm border-0 <?= ($kasaGiris-$kasaCikis)>=0?'bg-success':'bg-danger' ?> text-white">
             <div class="card-body text-center">
-                <div class="small opacity-75">Net Kasa</div>
+                <div class="small opacity-75">Net Kasa (Nakit)</div>
                 <div class="fw-bold fs-4"><?= para($kasaGiris - $kasaCikis) ?></div>
             </div>
         </div>

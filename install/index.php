@@ -41,6 +41,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         if (!$db_user || !$db_name) {
             $errors[] = 'Kullanıcı adı ve veritabanı adı zorunludur.';
+        } elseif (!preg_match('/^[a-zA-Z0-9_]+$/', $db_name)) {
+            $errors[] = 'Veritabanı adı yalnızca harf, rakam ve alt çizgi içerebilir.';
         } else {
             try {
                 // Önce DB olmadan bağlan

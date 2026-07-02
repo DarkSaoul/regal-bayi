@@ -1,12 +1,12 @@
 <?php
 define('BASE_URL', '/regal');
 require_once __DIR__ . '/../../includes/functions.php';
-auth();
+auth(); yetki(['yonetici','depo']);
 $sayfa_basligi = 'Stok Giriş';
 $pdo = db();
 $urun_id = (int)($_GET['urun_id'] ?? 0);
 $tedarikci_id = (int)($_GET['tedarikci_id'] ?? 0);
-$urunler = $pdo->query("SELECT id, kod, ad, stok_adedi FROM urunler WHERE aktif=1 ORDER BY ad")->fetchAll();
+$urunler = $pdo->query("SELECT id, kod, barkod, ad, stok_adedi FROM urunler WHERE aktif=1 ORDER BY ad")->fetchAll();
 $tedarikciler = $pdo->query("SELECT * FROM tedarikciler ORDER BY ad")->fetchAll();
 
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
@@ -16,35 +16,42 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $belge        = trim($_POST['belge_no'] ?? '');
     $aciklama     = trim($_POST['aciklama'] ?? '');
     $tedarikci    = (int)($_POST['tedarikci_id'] ?? 0) ?: null;
-    $birim_maliyet = $_POST['birim_maliyet'] !== '' ? (float)$_POST['birim_maliyet'] : null;
+    $birim_maliyet = $_POST['birim_maliyet'] !== '' ? max(0, (float)$_POST['birim_maliyet']) : null;
 
     $tesir_adet = max(0, min((int)($_POST['tesir_adet'] ?? 0), $miktar));
 
     if ($uid > 0 && $miktar > 0) {
-        stokGuncelle($uid, $miktar, 'giris', $belge, $aciklama, $tedarikci, $birim_maliyet);
-        if ($tedarikci && $birim_maliyet !== null && $birim_maliyet > 0) {
-            $toplam = round($miktar * $birim_maliyet, 2);
-            $pdo->prepare("UPDATE tedarikciler SET toplam_borc = toplam_borc + ? WHERE id=?")->execute([$toplam, $tedarikci]);
-        }
-        // Teşhire al
-        if ($tesir_adet > 0) {
-            $pdo->prepare("UPDATE urunler SET tesir_adedi = tesir_adedi + ? WHERE id=?")
-                ->execute([$tesir_adet, $uid]);
-            logla('tesir_guncelle', 'stok', $uid, "Stok girişiyle $tesir_adet adet teşhire alındı");
-        }
-        logla('stok_giris', 'stok', $uid, "$miktar adet stok girişi" . ($belge ? " | Belge: $belge" : '') . ($tesir_adet ? " | $tesir_adet teşhir" : ''));
-
-        // Seri no girişleri
-        $seri_nolar = array_filter(array_map('trim', explode("\n", $_POST['seri_nolar'] ?? '')));
-        foreach ($seri_nolar as $sn) {
-            if ($sn) {
-                $pdo->prepare("INSERT IGNORE INTO seri_numaralari (urun_id, seri_no) VALUES (?,?)")->execute([$uid, $sn]);
+        $pdo->beginTransaction();
+        try {
+            stokGuncelle($uid, $miktar, 'giris', $belge, $aciklama, $tedarikci, $birim_maliyet);
+            if ($tedarikci && $birim_maliyet !== null && $birim_maliyet > 0) {
+                $toplam = round($miktar * $birim_maliyet, 2);
+                $pdo->prepare("UPDATE tedarikciler SET toplam_borc = toplam_borc + ? WHERE id=?")->execute([$toplam, $tedarikci]);
             }
+            // Teşhire al
+            if ($tesir_adet > 0) {
+                $pdo->prepare("UPDATE urunler SET tesir_adedi = tesir_adedi + ? WHERE id=?")
+                    ->execute([$tesir_adet, $uid]);
+            }
+            // Seri no girişleri
+            $seri_nolar = array_filter(array_map('trim', explode("\n", $_POST['seri_nolar'] ?? '')));
+            foreach ($seri_nolar as $sn) {
+                if ($sn) {
+                    $pdo->prepare("INSERT IGNORE INTO seri_numaralari (urun_id, seri_no) VALUES (?,?)")->execute([$uid, $sn]);
+                }
+            }
+            $pdo->commit();
+            if ($tesir_adet > 0) logla('tesir_guncelle', 'stok', $uid, "Stok girişiyle $tesir_adet adet teşhire alındı");
+            logla('stok_giris', 'stok', $uid, "$miktar adet stok girişi" . ($belge ? " | Belge: $belge" : '') . ($tesir_adet ? " | $tesir_adet teşhir" : ''));
+            flash('basari', "$miktar adet stok girişi yapıldı.");
+            header('Location: index.php'); exit;
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            flash('hata', 'Stok girişi sırasında hata: ' . $e->getMessage());
         }
-        flash('basari', "$miktar adet stok girişi yapıldı.");
-        header('Location: index.php'); exit;
+    } else {
+        flash('hata', 'Geçersiz veri.');
     }
-    flash('hata', 'Geçersiz veri.');
 }
 require_once __DIR__ . '/../../includes/header.php';
 ?>

@@ -1,24 +1,25 @@
 <?php
 define('BASE_URL', '/regal');
 require_once __DIR__ . '/../../includes/functions.php';
-auth();
+auth(); yetki(['yonetici','kasiyer']);
 $sayfa_basligi = 'Yeni Satış';
 $pdo = db();
 
 $musteri_id = (int)($_GET['musteri_id'] ?? 0);
 $musteriler = $pdo->query("SELECT id, ad, COALESCE(soyad,'') AS soyad, COALESCE(firma_adi,'') AS firma_adi, COALESCE(telefon,'') AS telefon FROM musteriler ORDER BY ad")->fetchAll();
-$urunler    = $pdo->query("SELECT id, kod, barkod, ad, satis_fiyati, kdv_orani, stok_adedi FROM urunler WHERE aktif=1 ORDER BY ad")->fetchAll();
+$urunler    = $pdo->query("SELECT id, kod, barkod, ad, satis_fiyati, kdv_orani, stok_adedi, tesir_adedi FROM urunler WHERE aktif=1 ORDER BY ad")->fetchAll();
 
 $hata = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrfVerify();
     $d = $_POST;
-    $tarih     = $d['tarih'] ?: date('Y-m-d');
-    $fatura_no = yeniFaturaNo();
+    $tarih = $d['tarih'] ?? '';
+    if (!preg_match('/^\d{4}-\d{2}-\d{2}$/', $tarih) || strtotime($tarih) === false) $tarih = date('Y-m-d');
     $musteri   = (int)($d['musteri_id'] ?? 0) ?: null;
-    $odeme_tipi   = $d['odeme_tipi'] ?? 'nakit';
+    $odeme_tipi = in_array($d['odeme_tipi'] ?? '', ['nakit','kredi_karti','havale','taksitli'])
+                ? $d['odeme_tipi'] : 'nakit';
     $taksit_sayisi = $odeme_tipi === 'taksitli' ? max(1, (int)($d['taksit_sayisi'] ?? 1)) : 1;
-    $odenen    = (float)($d['odenen_tutar'] ?? 0);
+    $odenen    = max(0, (float)($d['odenen_tutar'] ?? 0));
 
     $kalem_urunler    = $d['kalem_urun']    ?? [];
     $kalem_miktarlar  = $d['kalem_miktar']  ?? [];
@@ -30,44 +31,56 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty(array_filter($kalem_urunler))) {
         $hata = 'En az bir ürün eklemelisiniz.';
     } else {
-        $ara = 0; $kdv_t = 0; $indirim_t = 0;
-        $kalemler = [];
-        $stokHatasi = [];
-
-        foreach ($kalem_urunler as $i => $uid) {
-            if (!$uid) continue;
-            $miktar  = max(1, (int)($kalem_miktarlar[$i] ?? 1));
-            $fiyat   = round((float)($kalem_fiyatlar[$i] ?? 0), 2);
-            $kdv     = round((float)($kalem_kdvler[$i] ?? 0), 2);
-            $indirim = round((float)($kalem_indirimler[$i] ?? 0), 2);
-
-            // Stok kontrolü — FOR UPDATE ile kilitle (race condition önleme)
-            $stokStmt = $pdo->prepare("SELECT ad, stok_adedi FROM urunler WHERE id=? FOR UPDATE");
-            $stokStmt->execute([$uid]);
-            $urunRow = $stokStmt->fetch();
-            if (!$urunRow || $urunRow['stok_adedi'] < $miktar) {
-                $stokHatasi[] = '"' . ($urunRow['ad'] ?? "ID:$uid") . '" için yeterli stok yok'
-                    . ' (İstenen: ' . $miktar . ', Mevcut: ' . ($urunRow['stok_adedi'] ?? 0) . ')';
-            }
-
-            $satir_ara = round($fiyat * $miktar - $indirim, 2);
-            $satir_kdv = round($satir_ara * $kdv / 100, 2);
-            $toplam    = round($satir_ara + $satir_kdv, 2);
-            $ara += $satir_ara; $kdv_t += $satir_kdv; $indirim_t += $indirim;
-            $tesir_satis = isset($kalem_tesirler[$i]) ? 1 : 0;
-            $kalemler[] = [$uid, $miktar, $fiyat, $kdv, $satir_kdv, $indirim, $toplam, $tesir_satis];
-        }
-
-        if (!empty($stokHatasi)) {
-            $hata = implode('<br>', $stokHatasi);
-        } else {
-
-        $genel = round($ara + $kdv_t, 2);
-        $kalan = max(0, round($genel - $odenen, 2));
-        $durum = $kalan > 0 ? 'bekliyor' : 'tamamlandi';
-
+        // Fatura no üretimi ile insert arası yarışı önlemek için adlandırılmış kilit
+        $pdo->query("SELECT GET_LOCK('regal_satis_kayit', 5)");
         $pdo->beginTransaction();
         try {
+            $ara = 0; $kdv_t = 0; $indirim_t = 0;
+            $kalemler = [];
+            $stokHatasi = [];
+
+            foreach ($kalem_urunler as $i => $uid) {
+                if (!$uid) continue;
+                $uid     = (int)$uid;
+                $miktar  = max(1, (int)($kalem_miktarlar[$i] ?? 1));
+                $fiyat   = max(0, round((float)($kalem_fiyatlar[$i] ?? 0), 2));
+                $kdv     = min(100, max(0, round((float)($kalem_kdvler[$i] ?? 0), 2)));
+                $indirim = max(0, round((float)($kalem_indirimler[$i] ?? 0), 2));
+                $tesir_satis = isset($kalem_tesirler[$i]) ? 1 : 0;
+
+                // İndirim satır tutarını aşamaz (negatif satır önlenir)
+                $indirim = min($indirim, round($fiyat * $miktar, 2));
+
+                // Stok kontrolü — transaction içinde FOR UPDATE ile kilitle
+                $stokStmt = $pdo->prepare("SELECT ad, stok_adedi, tesir_adedi FROM urunler WHERE id=? AND aktif=1 FOR UPDATE");
+                $stokStmt->execute([$uid]);
+                $urunRow = $stokStmt->fetch();
+                if (!$urunRow || $urunRow['stok_adedi'] < $miktar) {
+                    $stokHatasi[] = '"' . ($urunRow['ad'] ?? "ID:$uid") . '" için yeterli stok yok'
+                        . ' (İstenen: ' . $miktar . ', Mevcut: ' . ($urunRow['stok_adedi'] ?? 0) . ')';
+                } elseif ($tesir_satis && $urunRow['tesir_adedi'] < $miktar) {
+                    $stokHatasi[] = '"' . $urunRow['ad'] . '" için yeterli teşhir ürünü yok'
+                        . ' (İstenen: ' . $miktar . ', Teşhirde: ' . $urunRow['tesir_adedi'] . ')';
+                }
+
+                $satir_ara = round($fiyat * $miktar - $indirim, 2);
+                $satir_kdv = round($satir_ara * $kdv / 100, 2);
+                $toplam    = round($satir_ara + $satir_kdv, 2);
+                $ara += $satir_ara; $kdv_t += $satir_kdv; $indirim_t += $indirim;
+                $kalemler[] = [$uid, $miktar, $fiyat, $kdv, $satir_kdv, $indirim, $toplam, $tesir_satis];
+            }
+
+            if (!empty($stokHatasi)) {
+                throw new RuntimeException(implode(' • ', $stokHatasi));
+            }
+
+            $genel = round($ara + $kdv_t, 2);
+            // Para üstü kasaya/ciroya yazılmaz — ödenen tutar satış toplamını aşamaz
+            $odenen = min($odenen, $genel);
+            $kalan = max(0, round($genel - $odenen, 2));
+            $durum = $kalan > 0 ? 'bekliyor' : 'tamamlandi';
+
+            $fatura_no = yeniFaturaNo();
             $pdo->prepare("INSERT INTO satislar (fatura_no,musteri_id,kullanici_id,tarih,ara_toplam,kdv_toplam,indirim_toplam,genel_toplam,odeme_tipi,taksit_sayisi,odenen_tutar,kalan_tutar,durum,notlar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?)")
                 ->execute([$fatura_no, $musteri, $_SESSION['kullanici_id'], $tarih, $ara, $kdv_t, $indirim_t, $genel, $odeme_tipi, $taksit_sayisi, $odenen, $kalan, $durum, $d['notlar'] ?? '']);
             $satis_id = $pdo->lastInsertId();
@@ -89,37 +102,51 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             if ($odenen > 0) {
                 // Taksitli satışta ilk ödeme taksit_no=1 olarak kaydedilir
                 $ilk_taksit_no = ($odeme_tipi === 'taksitli') ? 1 : null;
+                $odeme_kanali  = $odeme_tipi === 'taksitli' ? 'nakit' : $odeme_tipi;
                 $pdo->prepare("INSERT INTO odemeler (satis_id,musteri_id,tarih,tutar,odeme_tipi,taksit_no,aciklama,kullanici_id) VALUES (?,?,?,?,?,?,?,?)")
-                    ->execute([$satis_id, $musteri, $tarih, $odenen, $odeme_tipi === 'taksitli' ? 'nakit' : $odeme_tipi, $ilk_taksit_no, 'Satış - '.$fatura_no, $_SESSION['kullanici_id']]);
-                $pdo->prepare("INSERT INTO kasa_hareketleri (tarih,tip,tutar,aciklama,kategori,kullanici_id) VALUES (?,?,?,?,?,?)")
-                    ->execute([$tarih, 'giris', $odenen, 'Satış: '.$fatura_no, 'Satış', $_SESSION['kullanici_id']]);
-            }
-            if ($musteri && $kalan > 0) {
-                $pdo->prepare("UPDATE musteriler SET toplam_borc = toplam_borc + ? WHERE id=?")->execute([$kalan, $musteri]);
-            }
-
-            // Taksit planı oluştur
-            if ($odeme_tipi === 'taksitli' && $taksit_sayisi > 1 && $genel > 0) {
-                $taksit_tutari = round($genel / $taksit_sayisi, 2);
-                $fark = round($genel - ($taksit_tutari * $taksit_sayisi), 2); // kuruş farkı son taksitte
-                for ($t = 1; $t <= $taksit_sayisi; $t++) {
-                    $vade = date('Y-m-d', strtotime("+{$t} month", strtotime($tarih)));
-                    $bu_tutar = ($t === $taksit_sayisi) ? round($taksit_tutari + $fark, 2) : $taksit_tutari;
-                    $odendi = ($t === 1 && $odenen >= $taksit_tutari) ? 1 : 0;
-                    $pdo->prepare("INSERT INTO taksit_plani (satis_id, taksit_no, tutar, vade_tarihi, odendi) VALUES (?,?,?,?,?)")
-                        ->execute([$satis_id, $t, $bu_tutar, $vade, $odendi]);
+                    ->execute([$satis_id, $musteri, $tarih, $odenen, $odeme_kanali, $ilk_taksit_no, 'Satış - '.$fatura_no, $_SESSION['kullanici_id']]);
+                // Kasa = fiziksel nakit çekmecesi; yalnızca nakit ödemeler işlenir
+                if ($odeme_kanali === 'nakit') {
+                    $pdo->prepare("INSERT INTO kasa_hareketleri (tarih,tip,tutar,aciklama,kategori,kullanici_id) VALUES (?,?,?,?,?,?)")
+                        ->execute([$tarih, 'giris', $odenen, 'Satış: '.$fatura_no, 'Satış', $_SESSION['kullanici_id']]);
                 }
             }
 
+            // Taksit planı oluştur — peşinat kaç taksiti karşılıyorsa öyle işaretle
+            if ($odeme_tipi === 'taksitli' && $taksit_sayisi > 1 && $genel > 0) {
+                $taksit_tutari = round($genel / $taksit_sayisi, 2);
+                $fark = round($genel - ($taksit_tutari * $taksit_sayisi), 2); // kuruş farkı son taksitte
+                $kalanOdeme = $odenen;
+                for ($t = 1; $t <= $taksit_sayisi; $t++) {
+                    $vade = date('Y-m-d', strtotime("+{$t} month", strtotime($tarih)));
+                    $bu_tutar = ($t === $taksit_sayisi) ? round($taksit_tutari + $fark, 2) : $taksit_tutari;
+                    $odendi = 0; $odeme_tarihi = null;
+                    if ($kalanOdeme >= $bu_tutar - 0.005) {
+                        $odendi = 1; $odeme_tarihi = $tarih;
+                        $kalanOdeme = round($kalanOdeme - $bu_tutar, 2);
+                    }
+                    $pdo->prepare("INSERT INTO taksit_plani (satis_id, taksit_no, tutar, vade_tarihi, odendi, odeme_tarihi) VALUES (?,?,?,?,?,?)")
+                        ->execute([$satis_id, $t, $bu_tutar, $vade, $odendi, $odeme_tarihi]);
+                }
+            }
+
+            // Müşteri borcunu açık satışlardan yeniden hesapla
+            musteriBorcuYenile($musteri);
+
             $pdo->commit();
+            $pdo->query("SELECT RELEASE_LOCK('regal_satis_kayit')");
             logla('satis_olustur', 'satislar', $satis_id, "Fatura: $fatura_no | " . para($genel));
             flash('basari', "Satış kaydedildi. Fatura: $fatura_no");
             header('Location: detay.php?id=' . $satis_id); exit;
+        } catch (RuntimeException $e) {
+            $pdo->rollBack();
+            $pdo->query("SELECT RELEASE_LOCK('regal_satis_kayit')");
+            $hata = $e->getMessage();
         } catch (Exception $e) {
             $pdo->rollBack();
+            $pdo->query("SELECT RELEASE_LOCK('regal_satis_kayit')");
             $hata = 'Hata: ' . $e->getMessage();
         }
-        } // stokHatasi else sonu
     }
 }
 require_once __DIR__ . '/../../includes/header.php';
@@ -200,7 +227,6 @@ require_once __DIR__ . '/../../includes/header.php';
                             <option value="kredi_karti">💳 Kredi Kartı</option>
                             <option value="havale">🏦 Havale / EFT</option>
                             <option value="taksitli">📅 Taksitli</option>
-                            <option value="karisik">🔀 Karışık</option>
                         </select>
                     </div>
                     <!-- Taksit seçenekleri (sadece taksitli seçilince görünür) -->

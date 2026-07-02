@@ -8,7 +8,7 @@ $pdo = db();
 $filtre = $_GET['filtre'] ?? 'tumu'; // tumu | gecmis | yaklasan | odendi
 $musteri_ara = trim($_GET['musteri'] ?? '');
 
-$where = "WHERE 1=1";
+$where = "WHERE s.durum != 'iptal'";
 $params = [];
 if ($filtre === 'gecmis')    { $where .= " AND tp.odendi=0 AND tp.vade_tarihi < CURDATE()"; }
 elseif ($filtre === 'yaklasan') { $where .= " AND tp.odendi=0 AND tp.vade_tarihi BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY)"; }
@@ -36,11 +36,12 @@ $taksitler = $taksitler->fetchAll();
 // Özet istatistikler
 $ozet = $pdo->query("
     SELECT
-        SUM(CASE WHEN odendi=0 AND vade_tarihi < CURDATE() THEN 1 ELSE 0 END) AS gecmis,
-        SUM(CASE WHEN odendi=0 AND vade_tarihi BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) AS yaklasan,
-        SUM(CASE WHEN odendi=0 THEN tutar ELSE 0 END) AS bekleyen_tutar,
-        SUM(CASE WHEN odendi=0 AND vade_tarihi < CURDATE() THEN tutar ELSE 0 END) AS gecmis_tutar
-    FROM taksit_plani
+        SUM(CASE WHEN tp.odendi=0 AND tp.vade_tarihi < CURDATE() THEN 1 ELSE 0 END) AS gecmis,
+        SUM(CASE WHEN tp.odendi=0 AND tp.vade_tarihi BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 30 DAY) THEN 1 ELSE 0 END) AS yaklasan,
+        SUM(CASE WHEN tp.odendi=0 THEN tp.tutar ELSE 0 END) AS bekleyen_tutar,
+        SUM(CASE WHEN tp.odendi=0 AND tp.vade_tarihi < CURDATE() THEN tp.tutar ELSE 0 END) AS gecmis_tutar
+    FROM taksit_plani tp
+    JOIN satislar s ON tp.satis_id = s.id AND s.durum != 'iptal'
 ")->fetch();
 
 require_once __DIR__ . '/../../includes/header.php';

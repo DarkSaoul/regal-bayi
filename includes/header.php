@@ -1,9 +1,10 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
 $mevcut_sayfa = basename(dirname($_SERVER['PHP_SELF']));
-$uyari_stok      = minStokUyarilari();
-$bekleyen_odeme  = bekleyenTahsilat();
-$geckmis_taksit  = geckmisKisatSayisi();
+$_sayaclar       = bildirimSayaclari(); // 3 sayaç tek sorguda
+$uyari_stok      = $_sayaclar['dusuk_stok'];
+$bekleyen_odeme  = $_sayaclar['bekleyen_odeme'];
+$geckmis_taksit  = $_sayaclar['gecikmis_taksit'];
 
 // Tema rengi
 $_tema = ayar('tema_renk', 'primary');

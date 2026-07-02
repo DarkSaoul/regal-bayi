@@ -55,7 +55,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         bruteForceArtir($kullanici_adi);
         // Zamanlama saldırısını önle — kullanıcı bulunamasa da aynı süre bekle
-        if (!$kullanici) password_verify('dummy', '$2y$10$dummy_hash_for_timing');
+        if (!$kullanici) password_verify('dummy', '$2y$10$S86zye.OhRL3CHWes2d/FuTQKYsPKPMbi76QQq7fJoAaqJO2w8Gqm');
         $hata = 'Kullanıcı adı veya şifre hatalı.';
     }
 }

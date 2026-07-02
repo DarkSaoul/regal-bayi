@@ -5,24 +5,35 @@ auth();
 $sayfa_basligi = 'Yeni Müşteri';
 $pdo = db();
 
+$hata = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrfVerify();
     $d = $_POST;
-    $pdo->prepare("INSERT INTO musteriler (tip,ad,soyad,firma_adi,tc_no,vergi_no,telefon,telefon2,email,adres,sehir,notlar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-        ->execute([$d['tip']??'bireysel', $d['ad'], $d['soyad']??'', $d['firma_adi']??'', $d['tc_no']??'', $d['vergi_no']??'', $d['telefon']??'', $d['telefon2']??'', $d['email']??'', $d['adres']??'', $d['sehir']??'', $d['notlar']??'']);
-    $yeni_id = $pdo->lastInsertId();
-    flash('basari', 'Müşteri kaydedildi.');
-    // Eğer satıştan gelindiyse geri dön
-    if (!empty($_GET['geri']) && str_starts_with($_GET['geri'], '/regal/')) {
-        header('Location: ' . $_GET['geri'] . '&musteri_id=' . $yeni_id); exit;
+    $email = trim($d['email'] ?? '');
+    if (!trim($d['ad'] ?? '')) {
+        $hata = 'Ad alanı zorunludur.';
+    } elseif ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $hata = 'Geçerli bir e-posta adresi girin.';
+    } else {
+        $pdo->prepare("INSERT INTO musteriler (tip,ad,soyad,firma_adi,tc_no,vergi_no,telefon,telefon2,email,adres,sehir,notlar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
+            ->execute([$d['tip']??'bireysel', trim($d['ad']), $d['soyad']??'', $d['firma_adi']??'', $d['tc_no']??'', $d['vergi_no']??'', $d['telefon']??'', $d['telefon2']??'', $email, $d['adres']??'', $d['sehir']??'', $d['notlar']??'']);
+        $yeni_id = $pdo->lastInsertId();
+        flash('basari', 'Müşteri kaydedildi.');
+        // Eğer satıştan gelindiyse geri dön
+        if (!empty($_GET['geri']) && str_starts_with($_GET['geri'], '/regal/')) {
+            header('Location: ' . $_GET['geri'] . '&musteri_id=' . $yeni_id); exit;
+        }
+        header('Location: index.php'); exit;
     }
-    header('Location: index.php'); exit;
 }
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 <div class="page-header">
     <h4><i class="bi bi-person-plus text-primary"></i> Yeni Müşteri</h4>
 </div>
+<?php if ($hata): ?>
+<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> <?= escH($hata) ?></div>
+<?php endif; ?>
 <div class="card shadow-sm">
     <div class="card-body">
     <form method="post">

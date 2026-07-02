@@ -10,18 +10,32 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrfVerify();
     $uid    = (int)$_POST['urun_id'];
     $miktar = (int)$_POST['miktar'];
-    $tip    = in_array($_POST['tip'], ['fire','iade_giris']) ? $_POST['tip'] : 'fire';
+    // Her iki seçenek de stok DÜŞÜRÜR; tedarikçiye iade 'cikis' tipiyle kaydedilir
+    // ('iade_giris' yalnızca stok artışları için kullanılır — bkz. satış iptali)
+    $secim  = $_POST['tip'] ?? 'fire';
+    $tip    = $secim === 'tedarikci_iade' ? 'cikis' : 'fire';
     $aciklama = trim($_POST['aciklama'] ?? '');
-
-    $stmtM = $pdo->prepare("SELECT stok_adedi FROM urunler WHERE id=?");
-    $stmtM->execute([$uid]);
-    $mevcut = (int)$stmtM->fetchColumn();
-    if ($uid > 0 && $miktar > 0 && $miktar <= $mevcut) {
-        stokGuncelle($uid, -$miktar, $tip, '', $aciklama);
-        flash('basari', "$miktar adet stok çıkışı yapıldı.");
-        header('Location: index.php'); exit;
+    if ($secim === 'tedarikci_iade') {
+        $aciklama = 'Tedarikçiye iade' . ($aciklama ? ' — ' . $aciklama : '');
     }
-    flash('hata', 'Geçersiz miktar veya stok yetersiz.');
+
+    $pdo->beginTransaction();
+    try {
+        $stmtM = $pdo->prepare("SELECT stok_adedi FROM urunler WHERE id=? FOR UPDATE");
+        $stmtM->execute([$uid]);
+        $mevcut = (int)$stmtM->fetchColumn();
+        if ($uid > 0 && $miktar > 0 && $miktar <= $mevcut) {
+            stokGuncelle($uid, -$miktar, $tip, '', $aciklama);
+            $pdo->commit();
+            flash('basari', "$miktar adet stok çıkışı yapıldı.");
+            header('Location: index.php'); exit;
+        }
+        $pdo->rollBack();
+        flash('hata', 'Geçersiz miktar veya stok yetersiz.');
+    } catch (Exception $e) {
+        $pdo->rollBack();
+        flash('hata', 'Stok çıkışı sırasında hata: ' . $e->getMessage());
+    }
 }
 require_once __DIR__ . '/../../includes/header.php';
 ?>
@@ -46,7 +60,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <label class="form-label fw-semibold">Çıkış Tipi</label>
             <select name="tip" class="form-select">
                 <option value="fire">Fire / Hasar</option>
-                <option value="iade_giris">İade (Stoka Dön)</option>
+                <option value="tedarikci_iade">Tedarikçiye İade</option>
             </select>
         </div>
         <div class="mb-3">

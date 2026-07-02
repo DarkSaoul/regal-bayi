@@ -20,9 +20,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $yeni_sifre   = $d['yeni_sifre'] ?? '';
     $sifre_tekrar = $d['sifre_tekrar'] ?? '';
 
+    // Kendi rolü değiştirilemez (gizli input manipülasyonuna karşı sunucu tarafı koruma)
+    if ($id == $_SESSION['kullanici_id']) $rol = $kullanici['rol'];
+
     if (!$ad_soyad) {
         $hata = 'Ad Soyad alanı zorunludur.';
-    } elseif ($yeni_sifre) {
+    } elseif ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $hata = 'Geçerli bir e-posta adresi girin.';
+    } elseif ($kullanici['rol'] === 'yonetici' && $rol !== 'yonetici') {
+        // Son aktif yöneticinin rolü düşürülemez — sistem kilitlenir
+        $sayi = $pdo->query("SELECT COUNT(*) FROM kullanicilar WHERE rol='yonetici' AND aktif=1")->fetchColumn();
+        if ((int)$sayi <= 1) $hata = 'Sistemdeki son yöneticinin rolü değiştirilemez.';
+    }
+
+    if (!$hata && $yeni_sifre) {
         $sifreHata = sifreDogrula($yeni_sifre);
         if ($sifreHata)                    { $hata = $sifreHata; }
         elseif ($yeni_sifre !== $sifre_tekrar) { $hata = 'Şifreler eşleşmiyor.'; }
@@ -31,7 +42,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (!$hata) {
         if ($yeni_sifre) {
             $pdo->prepare("UPDATE kullanicilar SET ad_soyad=?, email=?, rol=?, sifre=? WHERE id=?")
-                ->execute([$ad_soyad, $email, $rol, password_hash($yeni_sifre, PASSWORD_BCRYPT, ['cost'=>12]), $id]);
+                ->execute([$ad_soyad, $email, $rol, password_hash($yeni_sifre, PASSWORD_DEFAULT), $id]);
         } else {
             $pdo->prepare("UPDATE kullanicilar SET ad_soyad=?, email=?, rol=? WHERE id=?")
                 ->execute([$ad_soyad, $email, $rol, $id]);

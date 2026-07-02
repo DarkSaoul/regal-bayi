@@ -8,13 +8,19 @@ $pdo = db();
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrfVerify();
     $d = $_POST;
+    $email = trim($d['email'] ?? '');
+    $rol   = in_array($d['rol'] ?? '', ['yonetici','kasiyer','depo']) ? $d['rol'] : 'kasiyer';
     $sifreHata = sifreDogrula($d['sifre'] ?? '');
     if ($sifreHata) {
         $hata = $sifreHata;
+    } elseif (!trim($d['kullanici_adi'] ?? '') || !trim($d['ad_soyad'] ?? '')) {
+        $hata = 'Kullanıcı adı ve ad soyad zorunludur.';
+    } elseif ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
+        $hata = 'Geçerli bir e-posta adresi girin.';
     } else {
         try {
             $pdo->prepare("INSERT INTO kullanicilar (kullanici_adi,sifre,ad_soyad,email,rol) VALUES (?,?,?,?,?)")
-                ->execute([$d['kullanici_adi'], password_hash($d['sifre'], PASSWORD_BCRYPT, ['cost'=>12]), $d['ad_soyad'], $d['email']??'', $d['rol']??'kasiyer']);
+                ->execute([trim($d['kullanici_adi']), password_hash($d['sifre'], PASSWORD_DEFAULT), trim($d['ad_soyad']), $email, $rol]);
             flash('basari','Kullanıcı eklendi.');
             header('Location: index.php'); exit;
         } catch (Exception $e) {

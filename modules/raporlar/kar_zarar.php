@@ -14,10 +14,11 @@ $urunKar = $pdo->prepare("
         u.id, u.ad, u.kod, u.alis_fiyati,
         SUM(sk.miktar)      AS satis_adedi,
         AVG(sk.birim_fiyat) AS ort_satis_fiyati,
-        SUM(sk.toplam - sk.kdv_tutar - sk.indirim) AS net_satis,
-        SUM(sk.miktar * u.alis_fiyati)              AS toplam_maliyet,
-        SUM(sk.toplam - sk.kdv_tutar - sk.indirim)
-            - SUM(sk.miktar * u.alis_fiyati)        AS brut_kar
+        -- sk.toplam zaten indirim düşülmüş tutardır; yalnızca KDV çıkarılır
+        SUM(sk.toplam - sk.kdv_tutar) AS net_satis,
+        SUM(sk.miktar * u.alis_fiyati) AS toplam_maliyet,
+        SUM(sk.toplam - sk.kdv_tutar)
+            - SUM(sk.miktar * u.alis_fiyati) AS brut_kar
     FROM satis_kalemleri sk
     JOIN urunler u ON sk.urun_id = u.id
     JOIN satislar s ON sk.satis_id = s.id
@@ -33,10 +34,10 @@ $kategoriKar = $pdo->prepare("
     SELECT
         COALESCE(k.ad, 'Kategorisiz') AS kategori,
         SUM(sk.miktar)      AS adet,
-        SUM(sk.toplam - sk.kdv_tutar - sk.indirim) AS net_satis,
-        SUM(sk.miktar * u.alis_fiyati)              AS maliyet,
-        SUM(sk.toplam - sk.kdv_tutar - sk.indirim)
-            - SUM(sk.miktar * u.alis_fiyati)        AS brut_kar
+        SUM(sk.toplam - sk.kdv_tutar) AS net_satis,
+        SUM(sk.miktar * u.alis_fiyati) AS maliyet,
+        SUM(sk.toplam - sk.kdv_tutar)
+            - SUM(sk.miktar * u.alis_fiyati) AS brut_kar
     FROM satis_kalemleri sk
     JOIN urunler u ON sk.urun_id = u.id
     LEFT JOIN kategoriler k ON u.kategori_id = k.id
@@ -73,11 +74,13 @@ if (isset($_GET['export'])) {
     header('Content-Disposition: attachment; filename="kar_zarar_' . date('Y-m-d') . '.csv"');
     echo "\xEF\xBB\xBF";
     $out = fopen('php://output', 'w');
+    // Formül injection önlemi: =,+,-,@ ile başlayan hücrelerin önüne ' konur
+    $csvGuvenli = fn($v) => preg_match('/^[=+\-@]/', (string)$v) ? "'" . $v : $v;
     fputcsv($out, ['Ürün', 'Kod', 'Adet', 'Alış Fiyatı', 'Ort. Satış Fiyatı', 'Net Satış', 'Maliyet', 'Brüt Kâr', 'Kâr Marjı %'], ';');
     foreach ($urunKar as $r) {
         $marj = $r['net_satis'] > 0 ? round($r['brut_kar'] / $r['net_satis'] * 100, 1) : 0;
         fputcsv($out, [
-            $r['ad'], $r['kod'], $r['satis_adedi'],
+            $csvGuvenli($r['ad']), $csvGuvenli($r['kod']), $r['satis_adedi'],
             number_format($r['alis_fiyati'], 2, ',', '.'),
             number_format($r['ort_satis_fiyati'], 2, ',', '.'),
             number_format($r['net_satis'], 2, ',', '.'),

@@ -1,12 +1,23 @@
-# .env dosyasına dışarıdan erişimi engelle
-<Files ".env">
-    Order allow,deny
-    Deny from all
-</Files>
+# .env ve benzeri gizli dosyalara dışarıdan erişimi engelle
+<FilesMatch "^\.(env|env\.example|gitignore)$">
+    <IfModule mod_authz_core.c>
+        Require all denied
+    </IfModule>
+    <IfModule !mod_authz_core.c>
+        Order allow,deny
+        Deny from all
+    </IfModule>
+</FilesMatch>
 
 # Directory listing kapalı
 Options -Indexes
 
-# PHP hata gösterimini kapat
-php_flag display_errors off
-php_flag log_errors on
+# PHP hata gösterimini kapat (mod_php varsa)
+<IfModule mod_php.c>
+    php_flag display_errors off
+    php_flag log_errors on
+</IfModule>
+<IfModule mod_php7.c>
+    php_flag display_errors off
+    php_flag log_errors on
+</IfModule>

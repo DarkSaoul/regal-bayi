@@ -11,16 +11,20 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['tesir_guncelle'])) {
     $urun_id     = (int)$_POST['urun_id'];
     $yeni_tesir  = (int)$_POST['tesir_adedi'];
 
-    $stmt = $pdo->prepare("SELECT stok_adedi, tesir_adedi, ad FROM urunler WHERE id=?");
+    $pdo->beginTransaction();
+    $stmt = $pdo->prepare("SELECT stok_adedi, tesir_adedi, ad FROM urunler WHERE id=? FOR UPDATE");
     $stmt->execute([$urun_id]); $urun = $stmt->fetch();
 
     if ($urun) {
         $yeni_tesir = max(0, min($yeni_tesir, $urun['stok_adedi']));
         $pdo->prepare("UPDATE urunler SET tesir_adedi=? WHERE id=?")
             ->execute([$yeni_tesir, $urun_id]);
+        $pdo->commit();
         logla('tesir_guncelle', 'stok', $urun_id,
             $urun['ad'] . ' | Teşhir: ' . $urun['tesir_adedi'] . ' → ' . $yeni_tesir);
         flash('basari', '"' . $urun['ad'] . '" teşhir adedi güncellendi.');
+    } else {
+        $pdo->rollBack();
     }
     header('Location: tesir.php'); exit;
 }
@@ -34,18 +38,31 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && isset($_POST['seri_durum'])) {
 
     $izinli = ['stokta', 'tesirde'];
     if (in_array($yeni_dur, $izinli)) {
-        $stmt = $pdo->prepare("SELECT durum FROM seri_numaralari WHERE id=? AND urun_id=?");
-        $stmt->execute([$seri_id, $urun_id]); $eski = $stmt->fetchColumn();
+        $pdo->beginTransaction();
+        try {
+            $stmt = $pdo->prepare("SELECT durum FROM seri_numaralari WHERE id=? AND urun_id=? FOR UPDATE");
+            $stmt->execute([$seri_id, $urun_id]); $eski = $stmt->fetchColumn();
 
-        $pdo->prepare("UPDATE seri_numaralari SET durum=? WHERE id=?")->execute([$yeni_dur, $seri_id]);
+            // Yalnızca stokta↔tesirde geçişine izin ver; aynı duruma tekrar
+            // basmak (çift submit) sayaçları kaydırmasın
+            if ($eski !== false && in_array($eski, $izinli) && $eski !== $yeni_dur) {
+                $pdo->prepare("UPDATE seri_numaralari SET durum=? WHERE id=?")->execute([$yeni_dur, $seri_id]);
 
-        // tesir_adedi güncelle
-        $fark = ($yeni_dur === 'tesirde' ? 1 : -1);
-        $pdo->prepare("UPDATE urunler SET tesir_adedi = GREATEST(0, tesir_adedi + ?) WHERE id=?")
-            ->execute([$fark, $urun_id]);
+                $fark = ($yeni_dur === 'tesirde' ? 1 : -1);
+                $pdo->prepare("UPDATE urunler SET tesir_adedi = GREATEST(0, tesir_adedi + ?) WHERE id=?")
+                    ->execute([$fark, $urun_id]);
 
-        logla('tesir_seri', 'stok', $seri_id, "Seri #$seri_id: $eski → $yeni_dur");
-        flash('basari', 'Seri no durumu güncellendi.');
+                $pdo->commit();
+                logla('tesir_seri', 'stok', $seri_id, "Seri #$seri_id: $eski → $yeni_dur");
+                flash('basari', 'Seri no durumu güncellendi.');
+            } else {
+                $pdo->rollBack();
+                flash('uyari', 'Durum zaten güncel veya bu geçişe izin verilmiyor.');
+            }
+        } catch (Exception $e) {
+            $pdo->rollBack();
+            flash('hata', 'Güncelleme sırasında hata: ' . $e->getMessage());
+        }
     }
     header('Location: tesir.php'); exit;
 }

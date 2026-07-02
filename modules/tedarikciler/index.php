@@ -83,11 +83,14 @@ require_once __DIR__ . '/../../includes/header.php';
                     <a href="duzenle.php?id=<?= $t['id'] ?>" class="btn btn-sm btn-outline-secondary" title="Düzenle">
                         <i class="bi bi-pencil"></i>
                     </a>
-                    <a href="sil.php?id=<?= $t['id'] ?>"
-                       class="btn btn-sm btn-outline-danger" title="Sil"
-                       onclick="return confirm('Bu tedarikçiyi silmek istediğinize emin misiniz?')">
-                        <i class="bi bi-trash"></i>
-                    </a>
+                    <form method="post" action="sil.php" class="d-inline"
+                          onsubmit="return confirm('Bu tedarikçiyi silmek istediğinize emin misiniz?')">
+                        <?= csrfField() ?>
+                        <input type="hidden" name="id" value="<?= $t['id'] ?>">
+                        <button type="submit" class="btn btn-sm btn-outline-danger" title="Sil">
+                            <i class="bi bi-trash"></i>
+                        </button>
+                    </form>
                 </td>
             </tr>
             <?php endforeach; ?>
