@@ -54,6 +54,13 @@
 - ✅ Müşteri bazlı satış geçmişi
 - ✅ Borç durumu ve tahsilat takibi
 
+### 🚚 Tedarikçi Yönetimi
+- ✅ Birleşik **cari hesap ekstresi** (stok girişi + manuel borç + ödemeler, yürüyen bakiye) + CSV
+- ✅ Manuel borç ekleme (vade opsiyonlu) ve ödeme kaydı
+- ✅ **Satın alma siparişi**: sipariş oluştur → teslim al → otomatik stok girişi + borç işleme
+- ✅ IBAN / vergi dairesi kaydı, IBAN kopyala butonu
+- ✅ Dashboard'da yaklaşan / geçmiş tedarikçi ödemeleri
+
 ### 📊 Raporlar & Dashboard
 - ✅ Günlük / aylık satış istatistikleri
 - ✅ Aylık satış trendi grafiği (Chart.js)
@@ -89,6 +96,14 @@
 | Müşteriler | Raporlar |
 |:----------:|:--------:|
 | ![Müşteriler](docs/screenshots/musteriler.png) | ![Raporlar](docs/screenshots/raporlar.png) |
+
+| Tedarikçi Cari Ekstre | Satın Alma Siparişleri |
+|:---------------------:|:----------------------:|
+| ![Tedarikçi Detay](docs/screenshots/tedarikci-detay.png) | ![Siparişler](docs/screenshots/siparisler.png) |
+
+| Kâr-Zarar | Taksit Takvimi |
+|:---------:|:--------------:|
+| ![Kâr-Zarar](docs/screenshots/kar-zarar.png) | ![Taksit Takvimi](docs/screenshots/taksit-takvimi.png) |
 
 ### 📱 Mobil (iPhone 14 — 390px)
 
