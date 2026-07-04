@@ -102,8 +102,8 @@ require_once __DIR__ . '/../../includes/header.php';
                 <input type="text" name="ad" class="form-control" required value="<?= escH($d['ad']??'') ?>">
             </div>
             <div class="col-md-4">
-                <label class="form-label fw-semibold">Kategori</label>
-                <select name="kategori_id" class="form-select">
+                <label class="form-label fw-semibold">Kategori <small class="text-muted">(KDV/marj varsayılanını getirir)</small></label>
+                <select name="kategori_id" id="kategoriSecim" class="form-select" onchange="kategoriVarsayilan()">
                     <option value="">Seçin</option>
                     <?php foreach ($kategoriler as $k): ?>
                     <option value="<?= $k['id'] ?>" <?= ($d['kategori_id']??'')==$k['id']?'selected':'' ?>>
@@ -138,7 +138,7 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
             <div class="col-md-3">
                 <label class="form-label fw-semibold">KDV Oranı (%)</label>
-                <select name="kdv_orani" class="form-select">
+                <select name="kdv_orani" id="kdvSecim" class="form-select">
                     <?php foreach ([0,1,10,20] as $kdv): ?>
                     <option value="<?= $kdv ?>" <?= (float)($d['kdv_orani']??20)==$kdv?'selected':'' ?>>%<?= $kdv ?></option>
                     <?php endforeach; ?>
@@ -193,6 +193,25 @@ require_once __DIR__ . '/../../includes/header.php';
 <script>
 const alisEl = document.getElementById('alisInput');
 const satisEl = document.getElementById('satisInput');
+
+// Kategori varsayılanları: KDV oranı + hedef marj (marj alanına yazar, satışı ezmez)
+const KATEGORI_VARSAYILAN = <?= json_encode(array_column(array_map(fn($k) => [
+    'id' => (int)$k['id'],
+    'kdv' => isset($k['varsayilan_kdv']) && $k['varsayilan_kdv'] !== null ? (float)$k['varsayilan_kdv'] : null,
+    'marj' => isset($k['hedef_marj']) && $k['hedef_marj'] !== null ? (float)$k['hedef_marj'] : null,
+], $kategoriler), null, 'id'), JSON_UNESCAPED_UNICODE) ?>;
+
+function kategoriVarsayilan() {
+    const v = KATEGORI_VARSAYILAN[document.getElementById('kategoriSecim').value];
+    if (!v) return;
+    if (v.kdv !== null) document.getElementById('kdvSecim').value = Math.round(v.kdv);
+    if (v.marj !== null) {
+        document.getElementById('marjInput').value = v.marj;
+        // Alış girildiyse ve satış henüz boş/sıfırsa satışı da hesapla
+        const alis = parseFloat(alisEl.value) || 0;
+        if (alis > 0 && !(parseFloat(satisEl.value) > 0)) marjdanHesapla();
+    }
+}
 
 function marjdanHesapla() {
     const alis = parseFloat(alisEl.value) || 0;

@@ -17,7 +17,7 @@ $odemeGrup = $pdo->prepare("SELECT odeme_tipi, COUNT(*) AS adet, SUM(genel_topla
 $odemeGrup->execute([$bas,$bit]); $odemeGrup = $odemeGrup->fetchAll();
 
 // Kategoriye göre satış
-$kategoriSatis = $pdo->prepare("SELECT k.ad AS kategori, SUM(sk.miktar) AS adet, SUM(sk.toplam) AS tutar FROM satis_kalemleri sk JOIN urunler u ON sk.urun_id=u.id LEFT JOIN kategoriler k ON u.kategori_id=k.id JOIN satislar s ON sk.satis_id=s.id WHERE s.tarih BETWEEN ? AND ? AND s.durum!='iptal' GROUP BY k.id ORDER BY tutar DESC");
+$kategoriSatis = $pdo->prepare("SELECT k.ad AS kategori, k.renk, SUM(sk.miktar) AS adet, SUM(sk.toplam) AS tutar FROM satis_kalemleri sk JOIN urunler u ON sk.urun_id=u.id LEFT JOIN kategoriler k ON u.kategori_id=k.id JOIN satislar s ON sk.satis_id=s.id WHERE s.tarih BETWEEN ? AND ? AND s.durum!='iptal' GROUP BY k.id ORDER BY tutar DESC");
 $kategoriSatis->execute([$bas,$bit]); $kategoriSatis = $kategoriSatis->fetchAll();
 
 // En çok satan ürünler
@@ -136,7 +136,12 @@ require_once __DIR__ . '/../../includes/header.php';
                 <tbody>
                 <?php foreach ($kategoriSatis as $k): ?>
                 <tr>
-                    <td><?= escH($k['kategori']??'Kategori Yok') ?></td>
+                    <td>
+                        <?php if (!empty($k['renk'])): ?>
+                        <span class="d-inline-block rounded-circle me-1" style="width:10px;height:10px;background:<?= escH($k['renk']) ?>"></span>
+                        <?php endif; ?>
+                        <?= escH($k['kategori']??'Kategori Yok') ?>
+                    </td>
                     <td><?= $k['adet'] ?></td>
                     <td class="fw-bold"><?= para($k['tutar']) ?></td>
                 </tr>

@@ -64,6 +64,7 @@ foreach ($kategoriler as $k) {
     $s->execute([$k['id']]); $urunSayilari[$k['id']] = $s->fetchColumn();
 }
 $tumUrunSayisi = $pdo->query("SELECT COUNT(*) FROM urunler WHERE aktif=1")->fetchColumn();
+$onSecili = (int)($_GET['kategori_id'] ?? 0); // kategori kartlarındaki "zam/indirim" kısayolu
 
 require_once __DIR__ . '/../../includes/header.php';
 ?>
@@ -86,7 +87,7 @@ require_once __DIR__ . '/../../includes/header.php';
                     <select name="kategori_id" class="form-select" id="kategoriSec">
                         <option value="">Tüm Ürünler (<?= $tumUrunSayisi ?> adet)</option>
                         <?php foreach ($kategoriler as $k): ?>
-                        <option value="<?= $k['id'] ?>">
+                        <option value="<?= $k['id'] ?>" <?= $onSecili === (int)$k['id'] ? 'selected' : '' ?>>
                             <?= $k['ust_id'] ? '↳ ' : '' ?><?= escH($k['ad']) ?>
                             (<?= $urunSayilari[$k['id']] ?? 0 ?> ürün)
                         </option>
