@@ -1,7 +1,7 @@
 <?php
 define('BASE_URL', '/regal');
 require_once __DIR__ . '/../../includes/functions.php';
-auth();
+auth(); yetki(['yonetici','kasiyer']);
 $pdo = db();
 $id = (int)($_GET['id'] ?? 0);
 $t = $pdo->prepare("SELECT * FROM tedarikciler WHERE id=?");
@@ -15,11 +15,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty(trim($d['ad'] ?? ''))) {
         $hata = 'Firma adı zorunludur.';
     } else {
-        $pdo->prepare("UPDATE tedarikciler SET ad=?, yetkili=?, telefon=?, email=?, adres=?, vergi_no=?, notlar=? WHERE id=?")
+        $pdo->prepare("UPDATE tedarikciler SET ad=?, yetkili=?, telefon=?, email=?, adres=?, vergi_no=?, vergi_dairesi=?, iban=?, notlar=? WHERE id=?")
             ->execute([
                 trim($d['ad']), trim($d['yetkili'] ?? ''), trim($d['telefon'] ?? ''),
                 trim($d['email'] ?? ''), trim($d['adres'] ?? ''),
-                trim($d['vergi_no'] ?? ''), trim($d['notlar'] ?? ''), $id
+                trim($d['vergi_no'] ?? ''), trim($d['vergi_dairesi'] ?? ''),
+                strtoupper(str_replace(' ', '', trim($d['iban'] ?? ''))), trim($d['notlar'] ?? ''), $id
             ]);
         flash('basari', 'Tedarikçi güncellendi.');
         header('Location: detay.php?id=' . $id); exit;
@@ -62,8 +63,16 @@ require_once __DIR__ . '/../../includes/header.php';
                 <input type="email" name="email" class="form-control" value="<?= escH($d['email'] ?? '') ?>">
             </div>
             <div class="col-md-6">
+                <label class="form-label fw-semibold">Vergi Dairesi</label>
+                <input type="text" name="vergi_dairesi" class="form-control" value="<?= escH($d['vergi_dairesi'] ?? '') ?>">
+            </div>
+            <div class="col-md-8">
                 <label class="form-label fw-semibold">Adres</label>
                 <input type="text" name="adres" class="form-control" value="<?= escH($d['adres'] ?? '') ?>">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-semibold">IBAN <small class="text-muted">(havale için)</small></label>
+                <input type="text" name="iban" class="form-control" maxlength="34" placeholder="TR.." value="<?= escH($d['iban'] ?? '') ?>">
             </div>
             <div class="col-12">
                 <label class="form-label fw-semibold">Notlar</label>

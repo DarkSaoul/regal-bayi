@@ -14,8 +14,11 @@ $hata = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $kullanici_adi = trim($_POST['kullanici_adi'] ?? '');
     $sifre         = $_POST['sifre'] ?? '';
+    $token         = $_POST['csrf_token'] ?? '';
 
-    if (!$kullanici_adi || !$sifre) {
+    if (!hash_equals(csrfToken(), $token)) {
+        $hata = 'Güvenlik doğrulaması başarısız. Sayfayı yenileyip tekrar deneyin.';
+    } elseif (!$kullanici_adi || !$sifre) {
         $hata = 'Kullanıcı adı ve şifre zorunludur.';
     } elseif (!bruteForceKontrol($kullanici_adi)) {
         $kalan = ceil(bruteForceKalanSure($kullanici_adi) / 60);
@@ -89,6 +92,7 @@ body { background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); min-height
             <div class="alert alert-danger py-2"><i class="bi bi-exclamation-triangle"></i> <?= escH($hata) ?></div>
             <?php endif; ?>
             <form method="post" autocomplete="off">
+                <?= csrfField() ?>
                 <div class="mb-3">
                     <label class="form-label fw-semibold">Kullanıcı Adı</label>
                     <div class="input-group">

@@ -1,7 +1,7 @@
 <?php
 define('BASE_URL', '/regal');
 require_once __DIR__ . '/../../includes/functions.php';
-auth();
+auth(); yetki(['yonetici','kasiyer']);
 $sayfa_basligi = 'Yeni Tedarikçi';
 $pdo = db();
 
@@ -11,11 +11,12 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     if (empty(trim($d['ad'] ?? ''))) {
         $hata = 'Firma adı zorunludur.';
     } else {
-        $pdo->prepare("INSERT INTO tedarikciler (ad, yetkili, telefon, email, adres, vergi_no, notlar) VALUES (?,?,?,?,?,?,?)")
+        $pdo->prepare("INSERT INTO tedarikciler (ad, yetkili, telefon, email, adres, vergi_no, vergi_dairesi, iban, notlar) VALUES (?,?,?,?,?,?,?,?,?)")
             ->execute([
                 trim($d['ad']), trim($d['yetkili'] ?? ''), trim($d['telefon'] ?? ''),
                 trim($d['email'] ?? ''), trim($d['adres'] ?? ''),
-                trim($d['vergi_no'] ?? ''), trim($d['notlar'] ?? '')
+                trim($d['vergi_no'] ?? ''), trim($d['vergi_dairesi'] ?? ''),
+                strtoupper(str_replace(' ', '', trim($d['iban'] ?? ''))), trim($d['notlar'] ?? '')
             ]);
         flash('basari', '"' . trim($d['ad']) . '" tedarikçi olarak eklendi.');
         header('Location: index.php'); exit;
@@ -62,9 +63,19 @@ require_once __DIR__ . '/../../includes/header.php';
                        value="<?= escH($_POST['email'] ?? '') ?>">
             </div>
             <div class="col-md-6">
+                <label class="form-label fw-semibold">Vergi Dairesi</label>
+                <input type="text" name="vergi_dairesi" class="form-control"
+                       value="<?= escH($_POST['vergi_dairesi'] ?? '') ?>">
+            </div>
+            <div class="col-md-8">
                 <label class="form-label fw-semibold">Adres</label>
                 <input type="text" name="adres" class="form-control"
                        value="<?= escH($_POST['adres'] ?? '') ?>">
+            </div>
+            <div class="col-md-4">
+                <label class="form-label fw-semibold">IBAN <small class="text-muted">(havale için)</small></label>
+                <input type="text" name="iban" class="form-control" maxlength="34"
+                       placeholder="TR.." value="<?= escH($_POST['iban'] ?? '') ?>">
             </div>
             <div class="col-12">
                 <label class="form-label fw-semibold">Notlar</label>

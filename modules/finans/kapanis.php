@@ -5,7 +5,7 @@ auth();
 $sayfa_basligi = 'Kasa Kapanışı';
 $pdo = db();
 
-$tarih = $_GET['tarih'] ?? date('Y-m-d');
+$tarih = gecerliTarih($_GET['tarih'] ?? '', date('Y-m-d'));
 
 // Giriş — ödeme tipine göre
 $stmt = $pdo->prepare("

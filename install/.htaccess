@@ -1,4 +1,0 @@
-# Kurulum tamamlandıktan sonra bu klasörü silin
-<Files "installed.lock">
-    Require all denied
-</Files>

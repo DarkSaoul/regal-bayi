@@ -5,8 +5,8 @@ auth();
 $sayfa_basligi = 'Raporlar';
 $pdo = db();
 
-$bas = $_GET['bas'] ?? date('Y-m-01');
-$bit = $_GET['bit'] ?? date('Y-m-d');
+$bas = gecerliTarih($_GET['bas'] ?? '', date('Y-m-01'));
+$bit = gecerliTarih($_GET['bit'] ?? '', date('Y-m-d'));
 
 // Satış özeti
 $satisOzet = $pdo->prepare("SELECT COUNT(*) AS adet, SUM(genel_toplam) AS toplam, SUM(odenen_tutar) AS odenen, SUM(kalan_tutar) AS kalan FROM satislar WHERE tarih BETWEEN ? AND ? AND durum!='iptal'");
@@ -197,7 +197,8 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 
 <script>
-new Chart(document.getElementById('gunlukGrafik'), {
+// Chart.js footer'da yüklendiği için init DOMContentLoaded'a ertelenir
+document.addEventListener('DOMContentLoaded', () => new Chart(document.getElementById('gunlukGrafik'), {
     type: 'line',
     data: {
         labels: <?= json_encode(array_map(fn($g) => tarih($g['tarih']), $gunluk)) ?>,
@@ -210,7 +211,7 @@ new Chart(document.getElementById('gunlukGrafik'), {
         }]
     },
     options: { responsive: true, plugins: { legend: { display: false } } }
-});
+}));
 </script>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>

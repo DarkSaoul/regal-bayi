@@ -17,14 +17,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $dosyaAdi = 'regal_bayi_' . date('Y-m-d_H-i-s') . '.sql';
         $hedef    = $yedekDir . $dosyaAdi;
 
-        $mysqldump = '/opt/lampp/bin/mysqldump';
-        $cmd = escapeshellcmd($mysqldump)
-             . ' -u ' . escapeshellarg(DB_USER)
-             . (DB_PASS !== '' ? ' -p' . escapeshellarg(DB_PASS) : '')
-             . ' ' . escapeshellarg(DB_NAME) . ' > ' . escapeshellarg($hedef) . ' 2>&1';
-        exec($cmd, $output, $kod);
-
-        if ($kod === 0 && file_exists($hedef)) {
+        // Şifre process list'te görünmesin diye ortak güvenli helper kullanılır
+        $output = [];
+        if (mysqldumpCalistir($hedef, $output)) {
             unset($_SESSION['yedek_gerekli']);
             header('Content-Type: application/octet-stream');
             header('Content-Disposition: attachment; filename="' . $dosyaAdi . '"');

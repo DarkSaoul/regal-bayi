@@ -6,9 +6,9 @@ $sayfa_basligi = 'Satışlar';
 $pdo = db();
 
 $arama  = trim($_GET['ara'] ?? '');
-$bas    = $_GET['bas'] ?? date('Y-m-01');
-$bit    = $_GET['bit'] ?? date('Y-m-d');
-$durum  = $_GET['durum'] ?? '';
+$bas    = gecerliTarih($_GET['bas'] ?? '', date('Y-m-01'));
+$bit    = gecerliTarih($_GET['bit'] ?? '', date('Y-m-d'));
+$durum  = in_array($_GET['durum'] ?? '', ['tamamlandi','bekliyor','iptal'], true) ? $_GET['durum'] : '';
 
 if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     $where = "WHERE s.tarih BETWEEN ? AND ?";
@@ -24,17 +24,14 @@ if (isset($_GET['export']) && $_GET['export'] === 'csv') {
     $out = fopen('php://output','w');
     fputcsv($out,['Fatura No','Müşteri','Tarih','Toplam','Ödenen','Kalan','Ödeme Tipi','Durum'],';');
     foreach ($rows as $r) {
-        fputcsv($out,[$r['fatura_no'],$r['musteri_adi']?:'Perakende',$r['tarih'],
+        fputcsv($out,[csvHucre($r['fatura_no']),csvHucre($r['musteri_adi']?:'Perakende'),$r['tarih'],
             number_format($r['genel_toplam'],2,',','.'),
             number_format($r['odenen_tutar'],2,',','.'),
             number_format($r['kalan_tutar'],2,',','.'),
-            $r['odeme_tipi'],$r['durum']],';');
+            csvHucre($r['odeme_tipi']),csvHucre($r['durum'])],';');
     }
     fclose($out); exit;
 }
-$durum  = $_GET['durum'] ?? '';
-$bas    = $_GET['bas'] ?? date('Y-m-01');
-$bit    = $_GET['bit'] ?? date('Y-m-d');
 $sayfa  = max(1,(int)($_GET['s']??1));
 $limit  = 25; $offset = ($sayfa-1)*$limit;
 

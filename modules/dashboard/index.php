@@ -84,6 +84,76 @@ $enCokSatan = $pdo->query("
     GROUP BY u.id ORDER BY adet DESC LIMIT 5
 ")->fetchAll();
 
+// ── Rol bazlı görünürlük ─────────────────────────────────────
+$rol          = $_SESSION['rol'] ?? '';
+$isYon        = $rol === 'yonetici';
+$gorSatis     = in_array($rol, ['yonetici','kasiyer'], true); // ciro, tahsilat, taksit, müşteri
+$gorKasa      = in_array($rol, ['yonetici','kasiyer'], true); // kasa bakiyesi
+$gorStok      = in_array($rol, ['yonetici','depo'], true);    // stok/envanter
+$gorFinans    = $isYon;                                        // kâr, tedarikçi borç, envanter değeri
+
+// ── Bu ay brüt kâr + marj (kar_zarar mantığı) ────────────────
+$k = $pdo->prepare("
+    SELECT
+        COALESCE(SUM(sk.toplam - sk.kdv_tutar),0)                              AS net_satis,
+        COALESCE(SUM(sk.toplam - sk.kdv_tutar) - SUM(sk.miktar*u.alis_fiyati),0) AS brut_kar
+    FROM satis_kalemleri sk
+    JOIN urunler u  ON sk.urun_id = u.id
+    JOIN satislar s ON sk.satis_id = s.id
+    WHERE DATE_FORMAT(s.tarih,'%Y-%m')=? AND s.durum!='iptal'
+");
+$k->execute([$buAy]); $karRow = $k->fetch();
+$aylikBrutKar = (float)$karRow['brut_kar'];
+$aylikKarMarji = $karRow['net_satis'] > 0 ? round($aylikBrutKar / $karRow['net_satis'] * 100, 1) : 0;
+
+// ── Kasa bakiyesi ────────────────────────────────────────────
+$kasaBakiye = (float)$pdo->query("SELECT COALESCE(SUM(CASE WHEN tip='giris' THEN tutar ELSE -tutar END),0) FROM kasa_hareketleri")->fetchColumn();
+
+// ── Tedarikçi borçları toplamı ───────────────────────────────
+$tedarikciBorc = (float)$pdo->query("SELECT COALESCE(SUM(toplam_borc),0) FROM tedarikciler")->fetchColumn();
+
+// ── Envanter (stok) değeri ───────────────────────────────────
+$env = $pdo->query("
+    SELECT COALESCE(SUM(stok_adedi*satis_fiyati),0) AS satis_deger,
+           COALESCE(SUM(stok_adedi*alis_fiyati),0)  AS maliyet_deger,
+           COALESCE(SUM(stok_adedi),0)              AS toplam_adet,
+           COUNT(*)                                 AS urun_cesidi
+    FROM urunler WHERE aktif=1
+")->fetch();
+
+// ── Bugün işlem adedi + ortalama sepet ───────────────────────
+$g = $pdo->prepare("SELECT COUNT(*) AS adet, COALESCE(AVG(genel_toplam),0) AS ort FROM satislar WHERE tarih=? AND durum!='iptal'");
+$g->execute([$bugun]); $gunOzet = $g->fetch();
+
+// ── Yaklaşan taksitler (önümüzdeki 7 gün, ödenmemiş) ─────────
+$yaklasanTaksitler = $pdo->query("
+    SELECT tp.taksit_no, tp.tutar, tp.vade_tarihi, s.id AS satis_id, s.fatura_no,
+           CONCAT(m.ad,' ',COALESCE(m.soyad,'')) AS musteri_adi
+    FROM taksit_plani tp
+    JOIN satislar s   ON tp.satis_id = s.id
+    LEFT JOIN musteriler m ON s.musteri_id = m.id
+    WHERE tp.odendi=0 AND s.durum!='iptal'
+      AND tp.vade_tarihi BETWEEN CURDATE() AND DATE_ADD(CURDATE(), INTERVAL 7 DAY)
+    ORDER BY tp.vade_tarihi LIMIT 8
+")->fetchAll();
+
+// ── En borçlu 5 müşteri ──────────────────────────────────────
+$enBorcluMusteriler = $pdo->query("
+    SELECT id, TRIM(CONCAT(ad,' ',COALESCE(soyad,''))) AS ad_soyad, firma_adi, toplam_borc
+    FROM musteriler WHERE toplam_borc > 0 ORDER BY toplam_borc DESC LIMIT 5
+")->fetchAll();
+
+// ── Yaklaşan tedarikçi ödemeleri (14 gün, vadeli borç) ───────
+// Vadeli borç kalemi olan ve hâlâ açık borcu bulunan tedarikçiler
+$yaklasanTedarikci = $gorFinans ? $pdo->query("
+    SELECT tb.tutar, tb.vade_tarihi, tb.aciklama, t.id AS tedarikci_id, t.ad AS tedarikci_adi, t.toplam_borc
+    FROM tedarikci_borclar tb
+    JOIN tedarikciler t ON tb.tedarikci_id = t.id
+    WHERE tb.vade_tarihi IS NOT NULL AND t.toplam_borc > 0
+      AND tb.vade_tarihi BETWEEN DATE_SUB(CURDATE(), INTERVAL 30 DAY) AND DATE_ADD(CURDATE(), INTERVAL 14 DAY)
+    ORDER BY tb.vade_tarihi LIMIT 8
+")->fetchAll() : [];
+
 require_once __DIR__ . '/../../includes/header.php';
 ?>
 
@@ -108,9 +178,26 @@ require_once __DIR__ . '/../../includes/header.php';
         <h4><i class="bi bi-speedometer2 text-primary"></i> Dashboard</h4>
         <small class="text-muted"><i class="bi bi-calendar3 me-1"></i><?= $tr_tarih ?></small>
     </div>
-    <a href="<?= BASE_URL ?>/modules/satislar/yeni.php" class="btn btn-primary">
-        <i class="bi bi-plus-circle"></i> Yeni Satış
-    </a>
+    <div class="d-flex gap-2 flex-wrap">
+        <?php if ($gorSatis): ?>
+        <a href="<?= BASE_URL ?>/modules/finans/tahsilat.php" class="btn btn-outline-success">
+            <i class="bi bi-cash-coin"></i> <span class="d-none d-sm-inline">Tahsilat</span>
+        </a>
+        <a href="<?= BASE_URL ?>/modules/musteriler/ekle.php" class="btn btn-outline-primary">
+            <i class="bi bi-person-plus"></i> <span class="d-none d-sm-inline">Yeni Müşteri</span>
+        </a>
+        <?php endif; ?>
+        <?php if ($gorStok): ?>
+        <a href="<?= BASE_URL ?>/modules/stok/giris.php" class="btn btn-outline-success">
+            <i class="bi bi-box-arrow-in-down"></i> <span class="d-none d-sm-inline">Stok Giriş</span>
+        </a>
+        <?php endif; ?>
+        <?php if ($gorSatis): ?>
+        <a href="<?= BASE_URL ?>/modules/satislar/yeni.php" class="btn btn-primary">
+            <i class="bi bi-plus-circle"></i> Yeni Satış
+        </a>
+        <?php endif; ?>
+    </div>
 </div>
 
 <!-- ── Hava Durumu + Döviz Satırı ───────────────────────────── -->
@@ -217,8 +304,11 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 <?php endif; ?>
 
-<!-- ── İstatistik Kartları ───────────────────────────────────── -->
+<!-- ── İstatistik Kartları (rol bazlı) ───────────────────────── -->
 <div class="row g-3 mb-4">
+
+    <?php if ($gorSatis): ?>
+    <!-- Bugün Satış -->
     <div class="col-xl-3 col-md-6">
         <div class="card stat-card h-100 shadow-sm">
             <div class="card-body d-flex align-items-center gap-3">
@@ -226,10 +316,14 @@ require_once __DIR__ . '/../../includes/header.php';
                 <div>
                     <div class="text-muted small">Bugün Satış</div>
                     <div class="fw-bold fs-5"><?= para($gunlukSatis) ?></div>
+                    <div class="small text-muted">
+                        <?= (int)$gunOzet['adet'] ?> işlem · ort. <?= para($gunOzet['ort']) ?>
+                    </div>
                 </div>
             </div>
         </div>
     </div>
+    <!-- Aylık Satış -->
     <div class="col-xl-3 col-md-6">
         <div class="card stat-card h-100 shadow-sm">
             <div class="card-body d-flex align-items-center gap-3">
@@ -246,6 +340,42 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
         </div>
     </div>
+    <?php endif; ?>
+
+    <?php if ($gorFinans): ?>
+    <!-- Bu Ay Brüt Kâr -->
+    <div class="col-xl-3 col-md-6">
+        <div class="card stat-card h-100 shadow-sm">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-success bg-opacity-10 text-success"><i class="bi bi-cash-stack"></i></div>
+                <div>
+                    <div class="text-muted small">Bu Ay Brüt Kâr</div>
+                    <div class="fw-bold fs-5 <?= $aylikBrutKar>=0?'text-success':'text-danger' ?>"><?= para($aylikBrutKar) ?></div>
+                    <div class="small text-muted">Marj: %<?= $aylikKarMarji ?></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($gorKasa): ?>
+    <!-- Kasa Bakiyesi -->
+    <div class="col-xl-3 col-md-6">
+        <div class="card stat-card h-100 shadow-sm">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-wallet2"></i></div>
+                <div>
+                    <div class="text-muted small">Kasa Bakiyesi</div>
+                    <div class="fw-bold fs-5 <?= $kasaBakiye>=0?'':'text-danger' ?>"><?= para($kasaBakiye) ?></div>
+                    <a href="<?= BASE_URL ?>/modules/finans/" class="small text-decoration-none">Kasa detayı →</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($gorSatis): ?>
+    <!-- Bekleyen Tahsilat (müşteri alacağı) -->
     <div class="col-xl-3 col-md-6">
         <div class="card stat-card h-100 shadow-sm">
             <div class="card-body d-flex align-items-center gap-3">
@@ -253,10 +383,70 @@ require_once __DIR__ . '/../../includes/header.php';
                 <div>
                     <div class="text-muted small">Bekleyen Tahsilat</div>
                     <div class="fw-bold fs-5 text-warning"><?= para($bekleyenOdeme) ?></div>
+                    <div class="small text-muted">Müşteri alacağı</div>
                 </div>
             </div>
         </div>
     </div>
+    <?php endif; ?>
+
+    <?php if ($gorFinans): ?>
+    <!-- Tedarikçi Borcu -->
+    <div class="col-xl-3 col-md-6">
+        <div class="card stat-card h-100 shadow-sm">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-danger bg-opacity-10 text-danger"><i class="bi bi-truck"></i></div>
+                <div>
+                    <div class="text-muted small">Tedarikçi Borcu</div>
+                    <div class="fw-bold fs-5 <?= $tedarikciBorc>0?'text-danger':'' ?>"><?= para($tedarikciBorc) ?></div>
+                    <a href="<?= BASE_URL ?>/modules/tedarikciler/" class="small text-decoration-none">Tedarikçiler →</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Envanter Değeri -->
+    <div class="col-xl-3 col-md-6">
+        <div class="card stat-card h-100 shadow-sm">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-info bg-opacity-10 text-info"><i class="bi bi-boxes"></i></div>
+                <div>
+                    <div class="text-muted small">Envanter Değeri (satış)</div>
+                    <div class="fw-bold fs-5"><?= para($env['satis_deger']) ?></div>
+                    <div class="small text-muted">Maliyet: <?= para($env['maliyet_deger']) ?></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php elseif ($gorStok): ?>
+    <!-- Depo görünümü: adet bazlı envanter (fiyat gösterilmez) -->
+    <div class="col-xl-3 col-md-6">
+        <div class="card stat-card h-100 shadow-sm">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-info bg-opacity-10 text-info"><i class="bi bi-boxes"></i></div>
+                <div>
+                    <div class="text-muted small">Toplam Stok</div>
+                    <div class="fw-bold fs-5"><?= number_format($env['toplam_adet']) ?> adet</div>
+                    <div class="small text-muted"><?= number_format($env['urun_cesidi']) ?> çeşit ürün</div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <div class="col-xl-3 col-md-6">
+        <div class="card stat-card h-100 shadow-sm">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-danger bg-opacity-10 text-danger"><i class="bi bi-exclamation-triangle"></i></div>
+                <div>
+                    <div class="text-muted small">Kritik Stok</div>
+                    <div class="fw-bold fs-5 <?= $dusukStok>0?'text-danger':'' ?>"><?= number_format($dusukStok) ?> ürün</div>
+                    <a href="<?= BASE_URL ?>/modules/stok/dusuk.php" class="small text-decoration-none">Görüntüle →</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
+
+    <?php if ($gorSatis): ?>
+    <!-- Toplam Müşteri -->
     <div class="col-xl-3 col-md-6">
         <div class="card stat-card h-100 shadow-sm">
             <div class="card-body d-flex align-items-center gap-3">
@@ -268,12 +458,14 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
         </div>
     </div>
+    <?php endif; ?>
+
 </div>
 
-<!-- ── Uyarılar ─────────────────────────────────────────────── -->
-<?php if ($dusukStok > 0 || $gecmisKisat > 0): ?>
+<!-- ── Uyarılar (rol bazlı) ─────────────────────────────────── -->
+<?php if (($gorStok && $dusukStok > 0) || ($gorSatis && $gecmisKisat > 0)): ?>
 <div class="row g-3 mb-3">
-    <?php if ($dusukStok > 0): ?>
+    <?php if ($gorStok && $dusukStok > 0): ?>
     <div class="col-md-6">
         <div class="alert alert-danger d-flex align-items-center gap-2 mb-0">
             <i class="bi bi-exclamation-triangle-fill fs-5 flex-shrink-0"></i>
@@ -282,7 +474,7 @@ require_once __DIR__ . '/../../includes/header.php';
         </div>
     </div>
     <?php endif; ?>
-    <?php if ($gecmisKisat > 0): ?>
+    <?php if ($gorSatis && $gecmisKisat > 0): ?>
     <div class="col-md-6">
         <div class="alert alert-danger d-flex align-items-center gap-2 mb-0">
             <i class="bi bi-calendar-x fs-5 flex-shrink-0"></i>
@@ -294,8 +486,110 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 <?php endif; ?>
 
+<?php if ($gorSatis): ?>
+<!-- ── Yaklaşan Taksitler + En Borçlu Müşteriler ─────────────── -->
+<div class="row g-3 mb-3">
+    <!-- Yaklaşan taksitler (7 gün) -->
+    <div class="col-lg-7">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-calendar-week text-primary"></i> Yaklaşan Taksitler <small class="text-muted fw-normal">(7 gün)</small></span>
+                <a href="<?= BASE_URL ?>/modules/finans/taksit_takvimi.php" class="btn btn-sm btn-outline-primary">Takvim</a>
+            </div>
+            <div class="card-body p-0">
+            <?php if (empty($yaklasanTaksitler)): ?>
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-check-circle fs-4 d-block mb-1 opacity-25"></i>
+                    Önümüzdeki 7 günde vadesi gelen taksit yok
+                </div>
+            <?php else: ?>
+            <table class="table table-hover table-sm mb-0">
+                <thead class="table-light"><tr><th>Vade</th><th>Müşteri</th><th>Fatura</th><th class="text-end">Tutar</th><th></th></tr></thead>
+                <tbody>
+                <?php foreach ($yaklasanTaksitler as $t):
+                    $gunFark = (strtotime($t['vade_tarihi']) - strtotime($bugun)) / 86400;
+                    $vadeRenk = $gunFark <= 1 ? 'danger' : ($gunFark <= 3 ? 'warning' : 'secondary');
+                ?>
+                <tr>
+                    <td><span class="badge bg-<?= $vadeRenk ?>"><?= tarih($t['vade_tarihi']) ?></span></td>
+                    <td class="small"><?= escH($t['musteri_adi'] ?: 'Perakende') ?></td>
+                    <td class="small text-muted"><?= escH($t['fatura_no']) ?> · <?= (int)$t['taksit_no'] ?>. taksit</td>
+                    <td class="text-end fw-bold"><?= para($t['tutar']) ?></td>
+                    <td><a href="<?= BASE_URL ?>/modules/finans/tahsilat.php?satis_id=<?= $t['satis_id'] ?>" class="btn btn-xs btn-outline-success btn-sm py-0 px-1"><i class="bi bi-cash"></i></a></td>
+                </tr>
+                <?php endforeach; ?>
+                </tbody>
+            </table>
+            <?php endif; ?>
+            </div>
+        </div>
+    </div>
+    <!-- En borçlu müşteriler -->
+    <div class="col-lg-5">
+        <div class="card shadow-sm h-100">
+            <div class="card-header bg-white fw-semibold">
+                <i class="bi bi-person-exclamation text-danger"></i> En Borçlu Müşteriler
+            </div>
+            <div class="card-body p-0">
+            <?php if (empty($enBorcluMusteriler)): ?>
+                <div class="text-center text-muted py-4">
+                    <i class="bi bi-emoji-smile fs-4 d-block mb-1 opacity-25"></i>
+                    Borçlu müşteri yok
+                </div>
+            <?php else: ?>
+            <ul class="list-group list-group-flush">
+                <?php foreach ($enBorcluMusteriler as $mb): ?>
+                <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+                    <a href="<?= BASE_URL ?>/modules/musteriler/detay.php?id=<?= $mb['id'] ?>" class="text-truncate text-decoration-none me-2" style="max-width:180px">
+                        <?= escH($mb['ad_soyad'] ?: ($mb['firma_adi'] ?: 'Müşteri')) ?>
+                        <?php if ($mb['firma_adi'] && $mb['ad_soyad']): ?><small class="text-muted d-block"><?= escH($mb['firma_adi']) ?></small><?php endif; ?>
+                    </a>
+                    <span class="badge bg-danger"><?= para($mb['toplam_borc']) ?></span>
+                </li>
+                <?php endforeach; ?>
+            </ul>
+            <?php endif; ?>
+            </div>
+        </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if ($gorFinans && !empty($yaklasanTedarikci)): ?>
+<!-- ── Yaklaşan Tedarikçi Ödemeleri ──────────────────────────── -->
+<div class="card shadow-sm mb-3">
+    <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-truck text-danger"></i> Yaklaşan / Geçmiş Tedarikçi Ödemeleri</span>
+        <a href="<?= BASE_URL ?>/modules/tedarikciler/?borclu=1" class="btn btn-sm btn-outline-primary">Tedarikçiler</a>
+    </div>
+    <div class="card-body p-0">
+    <div class="table-responsive">
+    <table class="table table-hover table-sm mb-0">
+        <thead class="table-light"><tr><th>Vade</th><th>Tedarikçi</th><th>Açıklama</th><th class="text-end">Vadeli Tutar</th><th class="text-end">Güncel Borç</th><th></th></tr></thead>
+        <tbody>
+        <?php foreach ($yaklasanTedarikci as $yt):
+            $gecti = strtotime($yt['vade_tarihi']) < strtotime($bugun);
+            $vRenk = $gecti ? 'danger' : ((strtotime($yt['vade_tarihi']) - strtotime($bugun))/86400 <= 3 ? 'warning' : 'secondary');
+        ?>
+        <tr>
+            <td><span class="badge bg-<?= $vRenk ?>"><?= tarih($yt['vade_tarihi']) ?><?= $gecti?' <i class="bi bi-exclamation-circle"></i>':'' ?></span></td>
+            <td class="small"><?= escH($yt['tedarikci_adi']) ?></td>
+            <td class="small text-muted"><?= escH($yt['aciklama'] ?: '—') ?></td>
+            <td class="text-end"><?= para($yt['tutar']) ?></td>
+            <td class="text-end fw-bold text-danger"><?= para($yt['toplam_borc']) ?></td>
+            <td><a href="<?= BASE_URL ?>/modules/tedarikciler/detay.php?id=<?= $yt['tedarikci_id'] ?>" class="btn btn-xs btn-outline-primary btn-sm py-0 px-1"><i class="bi bi-eye"></i></a></td>
+        </tr>
+        <?php endforeach; ?>
+        </tbody>
+    </table>
+    </div>
+    </div>
+</div>
+<?php endif; ?>
+
 <!-- ── Grafik + En Çok Satan ────────────────────────────────── -->
 <div class="row g-3">
+    <?php if ($gorSatis): ?>
     <div class="col-xl-8">
         <div class="card shadow-sm">
             <div class="card-header bg-white fw-semibold">
@@ -306,7 +600,8 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
         </div>
     </div>
-    <div class="col-xl-4">
+    <?php endif; ?>
+    <div class="<?= $gorSatis ? 'col-xl-4' : 'col-12' ?>">
         <div class="card shadow-sm">
             <div class="card-header bg-white fw-semibold">
                 <i class="bi bi-trophy text-warning"></i> En Çok Satan (30 Gün)
@@ -321,7 +616,7 @@ require_once __DIR__ . '/../../includes/header.php';
                         <span class="text-truncate me-2" style="max-width:150px"><?= escH($u['ad']) ?></span>
                         <div class="text-end">
                             <span class="badge bg-primary"><?= $u['adet'] ?> adet</span>
-                            <div class="small text-muted"><?= para($u['tutar']) ?></div>
+                            <?php if ($gorSatis): ?><div class="small text-muted"><?= para($u['tutar']) ?></div><?php endif; ?>
                         </div>
                     </li>
                     <?php endforeach; ?>
@@ -332,6 +627,7 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
+<?php if ($gorSatis): ?>
 <!-- ── Son Satışlar ──────────────────────────────────────────── -->
 <div class="card shadow-sm mt-3">
     <div class="card-header bg-white fw-semibold d-flex justify-content-between">
@@ -375,10 +671,13 @@ require_once __DIR__ . '/../../includes/header.php';
         </div>
     </div>
 </div>
+<?php endif; ?>
 
 <script>
-// ── Satış Grafiği ─────────────────────────────────────────────
-new Chart(document.getElementById('satisGrafik'), {
+// ── Satış Grafiği (yalnızca canvas varsa) ────────────────────
+// Chart.js footer'da yüklendiği için init DOMContentLoaded'a ertelenir
+const _satisGrafikEl = document.getElementById('satisGrafik');
+if (_satisGrafikEl) document.addEventListener('DOMContentLoaded', () => new Chart(_satisGrafikEl, {
     type: 'bar',
     data: {
         labels: <?= json_encode(array_column($grafik,'ay')) ?>,
@@ -394,7 +693,7 @@ new Chart(document.getElementById('satisGrafik'), {
         plugins: { legend: { display: false } },
         scales: { y: { beginAtZero: true } }
     }
-});
+}));
 
 // ── Hava Durumu ───────────────────────────────────────────────
 const TR_GUNLER = ['Paz','Pzt','Sal','Çar','Per','Cum','Cmt'];

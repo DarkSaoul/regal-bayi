@@ -59,8 +59,8 @@ if (isset($_GET['export'])) {
     fputcsv($out,['Tarih','İşlem','Borç','Ödeme'],';');
     $bakiye = 0;
     foreach ($ekstre as $e) {
-        if ($e['tip']==='borc')  { fputcsv($out,[$e['tarih'],$e['aciklama'],number_format($e['tutar'],2,',','.'),''],';'); $bakiye += $e['tutar']; }
-        else                     { fputcsv($out,[$e['tarih'],$e['aciklama'],'',number_format($e['tutar'],2,',','.')],';'); $bakiye -= $e['tutar']; }
+        if ($e['tip']==='borc')  { fputcsv($out,[$e['tarih'],csvHucre($e['aciklama']),number_format($e['tutar'],2,',','.'),''],';'); $bakiye += $e['tutar']; }
+        else                     { fputcsv($out,[$e['tarih'],csvHucre($e['aciklama']),'',number_format($e['tutar'],2,',','.')],';'); $bakiye -= $e['tutar']; }
     }
     fputcsv($out,['','KALAN BAKIYE',number_format(max(0,$bakiye),2,',','.'),''],';');
     fclose($out); exit;

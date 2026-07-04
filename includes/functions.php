@@ -89,15 +89,29 @@ function csrfVerify(): void {
 const BF_MAX     = 5;
 const BF_PENCERE = 900; // 15 dakika
 
+// Aynı IP'den tüm hesaplara toplam deneme sınırı (password spraying önlemi)
+const BF_IP_MAX = 20;
+
 function bruteForceKontrol(string $kullanici_adi): bool {
     try {
+        $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+        // 1) Hesap+IP bazlı sayaç
         $stmt = db()->prepare(
             "SELECT COUNT(*) FROM aktivite_loglari
              WHERE aksiyon='giris_basarisiz' AND ip_adresi=? AND detay=?
                AND created_at > DATE_SUB(NOW(), INTERVAL " . BF_PENCERE . " SECOND)"
         );
-        $stmt->execute([$_SERVER['REMOTE_ADDR'] ?? '', $kullanici_adi]);
-        return (int)$stmt->fetchColumn() < BF_MAX;
+        $stmt->execute([$ip, $kullanici_adi]);
+        if ((int)$stmt->fetchColumn() >= BF_MAX) return false;
+
+        // 2) IP bazlı toplam sayaç — farklı kullanıcı adlarıyla spraying'i sınırlar
+        $ipStmt = db()->prepare(
+            "SELECT COUNT(*) FROM aktivite_loglari
+             WHERE aksiyon='giris_basarisiz' AND ip_adresi=?
+               AND created_at > DATE_SUB(NOW(), INTERVAL " . BF_PENCERE . " SECOND)"
+        );
+        $ipStmt->execute([$ip]);
+        return (int)$ipStmt->fetchColumn() < BF_IP_MAX;
     } catch (Exception $e) {
         return true; // log tablosu yoksa girişi engelleme
     }
@@ -140,6 +154,26 @@ function sifreDogrula(string $sifre): ?string {
 // ── LIKE wildcard escape ──────────────────────────────────────
 function likeParam(string $value): string {
     return '%' . str_replace(['\\', '%', '_'], ['\\\\', '\\%', '\\_'], $value) . '%';
+}
+
+// ── Tarih girişi doğrulama (XSS + geçersiz format önlemi) ──────
+// GET/POST'tan gelen tarih parametreleri hem SQL'e hem HTML'e gider;
+// Y-m-d dışındaki her şeyi varsayılana düşürerek attribute injection'ı
+// baştan keser (echo tarafında ayrıca escH gerekmez).
+function gecerliTarih(?string $str, ?string $varsayilan = null): string {
+    $varsayilan = $varsayilan ?? date('Y-m-d');
+    if (!$str || !preg_match('/^\d{4}-\d{2}-\d{2}$/', $str) || strtotime($str) === false) {
+        return $varsayilan;
+    }
+    return $str;
+}
+
+// ── CSV hücre güvenliği (formül enjeksiyonu önlemi) ───────────
+// =,+,-,@ ile başlayan hücreler Excel/Sheets'te formül olarak çalışır;
+// başına tek tırnak eklenerek metin olmaya zorlanır.
+function csvHucre($v): string {
+    $v = (string)$v;
+    return preg_match('/^[=+\-@\t\r]/', $v) ? "'" . $v : $v;
 }
 
 // ── Flash mesajlar ────────────────────────────────────────────
@@ -192,6 +226,16 @@ function escH($str) {
 function yeniFaturaNo() {
     $prefix = ayar('fatura_prefix', 'F') . date('Y') . date('m');
     $stmt = db()->prepare("SELECT MAX(CAST(SUBSTRING(fatura_no, ?) AS UNSIGNED)) FROM satislar WHERE fatura_no LIKE ?");
+    $stmt->execute([strlen($prefix) + 1, $prefix . '%']);
+    $sayi = (int)$stmt->fetchColumn() + 1;
+    return $prefix . str_pad($sayi, 4, '0', STR_PAD_LEFT);
+}
+
+// ── Sipariş no ────────────────────────────────────────────────
+// Ay bazında MAX numara + 1; tedarikci_siparisleri.siparis_no UNIQUE.
+function yeniSiparisNo() {
+    $prefix = 'SIP' . date('Y') . date('m');
+    $stmt = db()->prepare("SELECT MAX(CAST(SUBSTRING(siparis_no, ?) AS UNSIGNED)) FROM tedarikci_siparisleri WHERE siparis_no LIKE ?");
     $stmt->execute([strlen($prefix) + 1, $prefix . '%']);
     $sayi = (int)$stmt->fetchColumn() + 1;
     return $prefix . str_pad($sayi, 4, '0', STR_PAD_LEFT);
@@ -269,19 +313,32 @@ function bugunYedekVarMi(): bool {
     return false;
 }
 
+// mysqldump'ı çalıştırır. Şifre komut satırı yerine geçici, 0600 izinli bir
+// defaults dosyasından okunur; böylece `ps` çıktısında (process list) görünmez.
+// $hataCikti referansına stderr yazılır (arayüzde mesaj için).
+function mysqldumpCalistir(string $hedef, ?array &$hataCikti = null): bool {
+    $cnf = tempnam(sys_get_temp_dir(), 'regal_my');
+    if ($cnf === false) { $hataCikti = ['Geçici yapılandırma dosyası oluşturulamadı.']; return false; }
+    chmod($cnf, 0600);
+    file_put_contents($cnf,
+        "[client]\nuser=\"" . str_replace('"', '\"', DB_USER) . "\"\n"
+        . "password=\"" . str_replace('"', '\"', DB_PASS) . "\"\n");
+
+    $cmd = escapeshellcmd('/opt/lampp/bin/mysqldump')
+         . ' --defaults-extra-file=' . escapeshellarg($cnf)
+         . ' ' . escapeshellarg(DB_NAME)
+         . ' > ' . escapeshellarg($hedef) . ' 2>&1';
+    exec($cmd, $hataCikti, $kod);
+    unlink($cnf);
+    return $kod === 0 && file_exists($hedef);
+}
+
 function otomatikYedekAl(): bool {
     $yedekDir = __DIR__ . '/../backups/';
     if (!is_dir($yedekDir)) mkdir($yedekDir, 0777, true);
     $dosyaAdi = 'regal_bayi_oto_' . date('Y-m-d_H-i-s') . '.sql';
     $hedef    = $yedekDir . $dosyaAdi;
-    $cmd = escapeshellcmd('/opt/lampp/bin/mysqldump')
-         . ' -u ' . escapeshellarg(DB_USER)
-         . (DB_PASS !== '' ? ' -p' . escapeshellarg(DB_PASS) : '')
-         . ' '    . escapeshellarg(DB_NAME)
-         . ' > '  . escapeshellarg($hedef)
-         . ' 2>/dev/null';
-    exec($cmd, $cikti, $kod);
-    if ($kod === 0 && file_exists($hedef)) {
+    if (mysqldumpCalistir($hedef)) {
         ayarKaydet('son_oto_yedek', date('Y-m-d H:i:s'));
         return true;
     }

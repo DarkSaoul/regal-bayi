@@ -10,8 +10,8 @@ $limit     = 50;
 $offset    = ($sayfa-1)*$limit;
 $filtre_k  = (int)($_GET['kullanici']??0);
 $filtre_m  = trim($_GET['modul']??'');
-$filtre_bas = $_GET['bas'] ?? date('Y-m-01');
-$filtre_bit = $_GET['bit'] ?? date('Y-m-d');
+$filtre_bas = gecerliTarih($_GET['bas'] ?? '', date('Y-m-01'));
+$filtre_bit = gecerliTarih($_GET['bit'] ?? '', date('Y-m-d'));
 
 $where  = "WHERE al.created_at BETWEEN ? AND ?";
 $params = [$filtre_bas . ' 00:00:00', $filtre_bit . ' 23:59:59'];

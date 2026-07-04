@@ -5,8 +5,8 @@ auth();
 $sayfa_basligi = 'Kâr-Zarar Raporu';
 $pdo = db();
 
-$bas = $_GET['bas'] ?? date('Y-m-01');
-$bit = $_GET['bit'] ?? date('Y-m-d');
+$bas = gecerliTarih($_GET['bas'] ?? '', date('Y-m-01'));
+$bit = gecerliTarih($_GET['bit'] ?? '', date('Y-m-d'));
 
 // Ürün bazlı kar analizi
 $urunKar = $pdo->prepare("
@@ -60,7 +60,7 @@ $giderler = $pdo->prepare("
     SELECT kategori, SUM(tutar) AS toplam
     FROM kasa_hareketleri
     WHERE tip='cikis' AND tarih BETWEEN ? AND ?
-    AND kategori NOT IN ('Tahsilat')
+    AND kategori NOT IN ('Tahsilat','İade')
     GROUP BY kategori ORDER BY toplam DESC
 ");
 $giderler->execute([$bas, $bit]);
@@ -74,13 +74,12 @@ if (isset($_GET['export'])) {
     header('Content-Disposition: attachment; filename="kar_zarar_' . date('Y-m-d') . '.csv"');
     echo "\xEF\xBB\xBF";
     $out = fopen('php://output', 'w');
-    // Formül injection önlemi: =,+,-,@ ile başlayan hücrelerin önüne ' konur
-    $csvGuvenli = fn($v) => preg_match('/^[=+\-@]/', (string)$v) ? "'" . $v : $v;
+    // Formül injection önlemi: ortak csvHucre() helper'ı (functions.php)
     fputcsv($out, ['Ürün', 'Kod', 'Adet', 'Alış Fiyatı', 'Ort. Satış Fiyatı', 'Net Satış', 'Maliyet', 'Brüt Kâr', 'Kâr Marjı %'], ';');
     foreach ($urunKar as $r) {
         $marj = $r['net_satis'] > 0 ? round($r['brut_kar'] / $r['net_satis'] * 100, 1) : 0;
         fputcsv($out, [
-            $csvGuvenli($r['ad']), $csvGuvenli($r['kod']), $r['satis_adedi'],
+            csvHucre($r['ad']), csvHucre($r['kod']), $r['satis_adedi'],
             number_format($r['alis_fiyati'], 2, ',', '.'),
             number_format($r['ort_satis_fiyati'], 2, ',', '.'),
             number_format($r['net_satis'], 2, ',', '.'),
