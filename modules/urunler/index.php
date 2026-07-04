@@ -209,6 +209,7 @@ require_once __DIR__ . '/../../includes/header.php';
             <?php foreach ([0,1,10,20] as $kdv): ?><option value="<?= $kdv ?>">%<?= $kdv ?></option><?php endforeach; ?>
         </select>
         <button type="submit" form="topluForm" class="btn btn-sm btn-warning"><i class="bi bi-lightning"></i> Uygula</button>
+        <button type="button" class="btn btn-sm btn-outline-warning" onclick="topluFiyatGit()" title="Seçili ürünlerle toplu fiyat güncelleme"><i class="bi bi-percent"></i> Fiyat Güncelle</button>
         <input type="hidden" name="geri" form="topluForm" value="<?= escH(qs()) ?>">
     </div>
 </div>
@@ -334,6 +335,11 @@ function topluOnay() {
     const adet = document.querySelectorAll('.urun-sec:checked').length;
     if (!adet) { alert('Ürün seçilmedi.'); return false; }
     return confirm(adet + ' ürüne bu işlem uygulanacak. Emin misiniz?');
+}
+function topluFiyatGit() {
+    const ids = [...document.querySelectorAll('.urun-sec:checked')].map(c => c.value);
+    if (!ids.length) { alert('Ürün seçilmedi.'); return; }
+    window.location = 'toplu_fiyat.php?ids=' + ids.join(',');
 }
 function etiketBas() {
     const ids = [...document.querySelectorAll('.urun-sec:checked')].map(c => c.value);

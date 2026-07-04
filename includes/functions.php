@@ -258,12 +258,49 @@ function stokGuncelle($urun_id, $fark, $tip, $belge_no = '', $aciklama = '', $te
 
 // ── Fiyat geçmişi ─────────────────────────────────────────────
 // Alış/satış değişmediyse kayıt atmaz; hata uygulamayı kırmaz.
-function fiyatGecmisiKaydet(int $urun_id, $eskiAlis, $yeniAlis, $eskiSatis, $yeniSatis, string $kaynak = 'duzenleme'): void {
+// $grup: aynı toplu işlemdeki kayıtları bağlar (geri alma için).
+function fiyatGecmisiKaydet(int $urun_id, $eskiAlis, $yeniAlis, $eskiSatis, $yeniSatis, string $kaynak = 'duzenleme', ?string $grup = null): void {
     if ((float)$eskiAlis === (float)$yeniAlis && (float)$eskiSatis === (float)$yeniSatis) return;
     try {
-        db()->prepare("INSERT INTO fiyat_gecmisi (urun_id,eski_alis,yeni_alis,eski_satis,yeni_satis,kaynak,kullanici_id) VALUES (?,?,?,?,?,?,?)")
-            ->execute([$urun_id, $eskiAlis, $yeniAlis, $eskiSatis, $yeniSatis, $kaynak, $_SESSION['kullanici_id'] ?? null]);
+        db()->prepare("INSERT INTO fiyat_gecmisi (urun_id,eski_alis,yeni_alis,eski_satis,yeni_satis,kaynak,islem_grubu,kullanici_id) VALUES (?,?,?,?,?,?,?,?)")
+            ->execute([$urun_id, $eskiAlis, $yeniAlis, $eskiSatis, $yeniSatis, $kaynak, $grup, $_SESSION['kullanici_id'] ?? null]);
     } catch (Exception $e) {}
+}
+
+// ── Döviz kurları (TCMB — 1 saatlik cache) ───────────────────
+function tcmbKurlari(): array {
+    $cache = sys_get_temp_dir() . '/regal_tcmb.json';
+    if (file_exists($cache) && (time() - filemtime($cache)) < 3600) {
+        return json_decode(file_get_contents($cache), true) ?: [];
+    }
+    if (!function_exists('curl_init')) return [];
+    $ch = curl_init();
+    curl_setopt_array($ch, [
+        CURLOPT_URL            => 'https://www.tcmb.gov.tr/kurlar/today.xml',
+        CURLOPT_RETURNTRANSFER => true,
+        CURLOPT_TIMEOUT        => 5,
+        CURLOPT_SSL_VERIFYPEER => false,
+        CURLOPT_USERAGENT      => 'RegalBayi/1.0',
+    ]);
+    $data = curl_exec($ch);
+    curl_close($ch);
+    if (!$data) return [];
+    libxml_use_internal_errors(true);
+    $xml = simplexml_load_string($data);
+    if (!$xml) return [];
+    $hedef = ['USD' => 'ABD Doları', 'EUR' => 'Euro', 'GBP' => 'İngiliz Sterlini', 'CHF' => 'İsviçre Frangı'];
+    $kurlar = [];
+    foreach ($xml->Currency as $c) {
+        $kod = (string)($c->attributes()['CurrencyCode'] ?? '');
+        if (!isset($hedef[$kod])) continue;
+        $alis  = (float)str_replace(',', '.', (string)$c->ForexBuying);
+        $satis = (float)str_replace(',', '.', (string)$c->ForexSelling);
+        if ($alis > 0 && $satis > 0) {
+            $kurlar[$kod] = ['alis' => $alis, 'satis' => $satis, 'isim' => $hedef[$kod]];
+        }
+    }
+    if ($kurlar) file_put_contents($cache, json_encode($kurlar));
+    return $kurlar;
 }
 
 // ── Ürün görseli yükleme ─────────────────────────────────────

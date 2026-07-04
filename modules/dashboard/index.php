@@ -13,41 +13,7 @@ $tr_gunler = ['Pazar','Pazartesi','Salı','Çarşamba','Perşembe','Cuma','Cumar
 $tr_aylar  = ['Ocak','Şubat','Mart','Nisan','Mayıs','Haziran','Temmuz','Ağustos','Eylül','Ekim','Kasım','Aralık'];
 $tr_tarih  = date('j') . ' ' . $tr_aylar[(int)date('n')-1] . ' ' . date('Y') . ', ' . $tr_gunler[(int)date('w')];
 
-// ── Döviz kurları (TCMB — 1 saatlik cache) ───────────────────
-function tcmbKurlari(): array {
-    $cache = sys_get_temp_dir() . '/regal_tcmb.json';
-    if (file_exists($cache) && (time() - filemtime($cache)) < 3600) {
-        return json_decode(file_get_contents($cache), true) ?: [];
-    }
-    if (!function_exists('curl_init')) return [];
-    $ch = curl_init();
-    curl_setopt_array($ch, [
-        CURLOPT_URL            => 'https://www.tcmb.gov.tr/kurlar/today.xml',
-        CURLOPT_RETURNTRANSFER => true,
-        CURLOPT_TIMEOUT        => 5,
-        CURLOPT_SSL_VERIFYPEER => false,
-        CURLOPT_USERAGENT      => 'RegalBayi/1.0',
-    ]);
-    $data = curl_exec($ch);
-    curl_close($ch);
-    if (!$data) return [];
-    libxml_use_internal_errors(true);
-    $xml = simplexml_load_string($data);
-    if (!$xml) return [];
-    $hedef = ['USD' => 'ABD Doları', 'EUR' => 'Euro', 'GBP' => 'İngiliz Sterlini', 'CHF' => 'İsviçre Frangı'];
-    $kurlar = [];
-    foreach ($xml->Currency as $c) {
-        $kod = (string)($c->attributes()['CurrencyCode'] ?? '');
-        if (!isset($hedef[$kod])) continue;
-        $alis  = (float)str_replace(',', '.', (string)$c->ForexBuying);
-        $satis = (float)str_replace(',', '.', (string)$c->ForexSelling);
-        if ($alis > 0 && $satis > 0) {
-            $kurlar[$kod] = ['alis' => $alis, 'satis' => $satis, 'isim' => $hedef[$kod]];
-        }
-    }
-    if ($kurlar) file_put_contents($cache, json_encode($kurlar));
-    return $kurlar;
-}
+// Döviz kurları (TCMB) — tcmbKurlari() functions.php'de (toplu_fiyat da kullanır)
 $doviz = tcmbKurlari();
 $dovizJson = json_encode($doviz);
 
