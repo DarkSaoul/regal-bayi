@@ -47,6 +47,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
         $pdo->prepare("UPDATE urunler SET satis_fiyati=?, alis_fiyati=? WHERE id=?")
             ->execute([$yeniSatis, $yeniAlis, $u['id']]);
+        fiyatGecmisiKaydet((int)$u['id'], $u['alis_fiyati'], $yeniAlis, $u['satis_fiyati'], $yeniSatis, 'toplu_fiyat');
         $guncellenen++;
     }
 

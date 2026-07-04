@@ -1,0 +1,4 @@
+# Yüklenen dosyalar içinde PHP çalıştırılamaz (Apache 2.4)
+<FilesMatch "\.(?i:php|phtml|phar|php[0-9])$">
+Require all denied
+</FilesMatch>

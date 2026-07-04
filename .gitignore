@@ -33,3 +33,7 @@ backups/
 
 # Kurulum kilidi
 install/installed.lock
+
+# Yüklenen ürün görselleri
+uploads/urunler/*
+!uploads/urunler/.gitkeep

@@ -256,6 +256,34 @@ function stokGuncelle($urun_id, $fark, $tip, $belge_no = '', $aciklama = '', $te
         ->execute([$urun_id, $tip, abs($fark), $onceki, $sonraki, $belge_no, $aciklama, $birim_maliyet, $toplam_maliyet, $tedarikci_id, $_SESSION['kullanici_id'] ?? null]);
 }
 
+// ── Fiyat geçmişi ─────────────────────────────────────────────
+// Alış/satış değişmediyse kayıt atmaz; hata uygulamayı kırmaz.
+function fiyatGecmisiKaydet(int $urun_id, $eskiAlis, $yeniAlis, $eskiSatis, $yeniSatis, string $kaynak = 'duzenleme'): void {
+    if ((float)$eskiAlis === (float)$yeniAlis && (float)$eskiSatis === (float)$yeniSatis) return;
+    try {
+        db()->prepare("INSERT INTO fiyat_gecmisi (urun_id,eski_alis,yeni_alis,eski_satis,yeni_satis,kaynak,kullanici_id) VALUES (?,?,?,?,?,?,?)")
+            ->execute([$urun_id, $eskiAlis, $yeniAlis, $eskiSatis, $yeniSatis, $kaynak, $_SESSION['kullanici_id'] ?? null]);
+    } catch (Exception $e) {}
+}
+
+// ── Ürün görseli yükleme ─────────────────────────────────────
+// Başarıda dosya adını (uploads/urunler/ altına göre), yüklenmediyse null döner;
+// doğrulama hatasında Exception fırlatır. jpg/png/webp, en fazla 2 MB.
+function urunResmiYukle(array $dosya, ?string $eskiResim = null): ?string {
+    if (($dosya['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return null;
+    if ($dosya['error'] !== UPLOAD_ERR_OK) throw new Exception('Görsel yüklenemedi (hata kodu: ' . $dosya['error'] . ').');
+    if ($dosya['size'] > 2 * 1024 * 1024) throw new Exception('Görsel en fazla 2 MB olabilir.');
+    $bilgi = @getimagesize($dosya['tmp_name']);
+    $izinli = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp'];
+    if (!$bilgi || !isset($izinli[$bilgi[2]])) throw new Exception('Yalnızca JPG, PNG veya WEBP görsel yüklenebilir.');
+    $dir = __DIR__ . '/../uploads/urunler/';
+    if (!is_dir($dir)) @mkdir($dir, 0777, true);
+    $ad = 'urun_' . date('YmdHis') . '_' . bin2hex(random_bytes(4)) . '.' . $izinli[$bilgi[2]];
+    if (!move_uploaded_file($dosya['tmp_name'], $dir . $ad)) throw new Exception('Görsel kaydedilemedi (dizin yazma izni).');
+    if ($eskiResim && is_file($dir . basename($eskiResim))) @unlink($dir . basename($eskiResim));
+    return $ad;
+}
+
 // ── Müşteri borcu ─────────────────────────────────────────────
 // toplam_borc türetilmiş veridir; artır/azalt yerine her değişiklikte
 // açık satışların kalanından yeniden hesaplanır (senkron kaybı önlenir).
