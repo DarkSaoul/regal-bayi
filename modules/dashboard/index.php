@@ -175,6 +175,40 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
+<!-- ── Hızlı Stok Sorgulama ──────────────────────────────────── -->
+<div class="card shadow-sm mb-3">
+    <div class="card-body py-2 px-3">
+        <div class="d-flex align-items-center gap-2 flex-wrap">
+            <span class="fw-semibold small text-nowrap"><i class="bi bi-search text-primary me-1"></i>Hızlı Stok Sorgulama</span>
+            <div class="position-relative flex-grow-1" style="min-width:220px;max-width:420px">
+                <input type="text" id="stokSorguInput" class="form-control form-control-sm"
+                       placeholder="Ürün adı, kodu veya barkod ile ara..." autocomplete="off">
+                <span class="spinner-border spinner-border-sm text-primary position-absolute d-none"
+                      id="stokSorguSpinner" style="right:10px;top:6px"></span>
+            </div>
+            <button type="button" class="btn btn-sm btn-primary" id="stokSorguBtn"><i class="bi bi-search"></i> Sorgula</button>
+            <span class="text-muted small">En az 2 karakter yazın veya barkod okutup Enter'a basın.</span>
+        </div>
+    </div>
+</div>
+
+<!-- Stok sorgu sonuç modalı -->
+<div class="modal fade" id="stokSorguModal" tabindex="-1">
+    <div class="modal-dialog modal-lg modal-dialog-scrollable">
+        <div class="modal-content">
+            <div class="modal-header py-2">
+                <h6 class="modal-title"><i class="bi bi-box-seam text-primary"></i> Stok Sorgu Sonuçları</h6>
+                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="list-group list-group-flush" id="stokSorguListe">
+                    <div class="text-center text-muted py-4">Arama yapın</div>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
 <!-- ── Hava Durumu + Döviz Satırı ───────────────────────────── -->
 <div class="row g-3 mb-3">
 
@@ -875,6 +909,69 @@ function ceviriYon() {
 document.getElementById('ceviriMiktar')?.addEventListener('input', ceviriHesapla);
 document.getElementById('ceviriKod')?.addEventListener('change', ceviriHesapla);
 if (Object.keys(dovizKurlar).length) ceviriHesapla();
+
+// ── Hızlı Stok Sorgulama ──────────────────────────────────────
+(function () {
+    const input    = document.getElementById('stokSorguInput');
+    const btn      = document.getElementById('stokSorguBtn');
+    const spinner  = document.getElementById('stokSorguSpinner');
+    const liste    = document.getElementById('stokSorguListe');
+    if (!input) return;
+    const modalEl  = document.getElementById('stokSorguModal');
+    const modal    = new bootstrap.Modal(modalEl);
+    let debounceT  = null;
+
+    function durumRozet(d) {
+        if (d === 'tukendi') return '<span class="badge bg-danger">Tükendi</span>';
+        if (d === 'kritik')  return '<span class="badge bg-warning text-dark">Kritik Stok</span>';
+        return '<span class="badge bg-success">Stokta</span>';
+    }
+
+    function sorgula() {
+        const q = input.value.trim();
+        if (q.length < 2) { input.classList.add('is-invalid'); setTimeout(() => input.classList.remove('is-invalid'), 900); return; }
+        spinner.classList.remove('d-none');
+        modal.show();
+        liste.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-1"></span> Aranıyor...</div>';
+        fetch('stok_sorgu.php?q=' + encodeURIComponent(q))
+            .then(r => r.json())
+            .then(j => {
+                spinner.classList.add('d-none');
+                if (!j.ok || !j.sonuclar.length) {
+                    liste.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-search fs-4 d-block mb-2 opacity-25"></i>"' + q.replace(/</g,'&lt;') + '" ile eşleşen ürün bulunamadı</div>';
+                    return;
+                }
+                liste.innerHTML = j.sonuclar.map(u => `
+                    <a href="<?= BASE_URL ?>/modules/urunler/detay.php?id=${u.id}" class="list-group-item list-group-item-action d-flex align-items-center gap-3">
+                        ${u.resim
+                            ? `<img src="${u.resim}" class="rounded border flex-shrink-0" style="width:44px;height:44px;object-fit:cover">`
+                            : `<div class="rounded border bg-light d-flex align-items-center justify-content-center flex-shrink-0" style="width:44px;height:44px"><i class="bi bi-box-seam text-muted"></i></div>`}
+                        <div class="flex-grow-1">
+                            <div class="fw-semibold">${u.ad.replace(/</g,'&lt;')}</div>
+                            <div class="small text-muted">${u.kod}${u.marka ? ' • ' + u.marka : ''}${u.kategori ? ' • ' + u.kategori : ''}</div>
+                        </div>
+                        <div class="text-end">
+                            <div>${durumRozet(u.durum)}</div>
+                            <div class="small fw-semibold mt-1">${u.stok} adet</div>
+                            ${u.tesir > 0 ? '<div class="small text-warning"><i class="bi bi-shop-window"></i> ' + u.tesir + ' teşhir</div>' : ''}
+                            <div class="small text-primary">${u.fiyat}</div>
+                        </div>
+                    </a>`).join('');
+            })
+            .catch(() => {
+                spinner.classList.add('d-none');
+                liste.innerHTML = '<div class="text-center text-danger py-4">Sorgu sırasında bağlantı hatası oluştu.</div>';
+            });
+    }
+
+    btn.addEventListener('click', sorgula);
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sorgula(); } });
+    input.addEventListener('input', () => {
+        clearTimeout(debounceT);
+        if (input.value.trim().length < 2) return;
+        debounceT = setTimeout(sorgula, 450);
+    });
+})();
 </script>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>
