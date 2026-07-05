@@ -1,6 +1,17 @@
 <?php
 if (session_status() === PHP_SESSION_NONE) session_start();
-$mevcut_sayfa = basename(dirname($_SERVER['PHP_SELF']));
+// Aktif menü: önce dosya bazlı özel sayfalar, yoksa modül klasörü.
+// (Yalnızca klasöre bakmak, örn. stok/tesir.php'de menüyü "Stok Takibi"nde kilitliyordu.)
+$_nav_script = basename($_SERVER['PHP_SELF']);
+$_nav_modul  = basename(dirname($_SERVER['PHP_SELF']));
+$_nav_ozel = [
+    'stok'         => ['tesir.php' => 'tesir', 'sayim.php' => 'sayim'],
+    'urunler'      => ['toplu_fiyat.php' => 'toplu_fiyat'],
+    'finans'       => ['taksit_takvimi.php' => 'taksit_takvimi', 'kapanis.php' => 'kapanis'],
+    'raporlar'     => ['kar_zarar.php' => 'kar_zarar'],
+    'kullanicilar' => ['aktivite.php' => 'aktivite'],
+];
+$mevcut_sayfa = $_nav_ozel[$_nav_modul][$_nav_script] ?? $_nav_modul;
 $_sayaclar       = bildirimSayaclari(); // 3 sayaç tek sorguda
 $uyari_stok      = $_sayaclar['dusuk_stok'];
 $bekleyen_odeme  = $_sayaclar['bekleyen_odeme'];

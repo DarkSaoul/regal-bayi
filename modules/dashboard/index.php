@@ -409,6 +409,19 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
         </div>
     </div>
+    <?php $tesirOzet = $pdo->query("SELECT COUNT(CASE WHEN tesir_adedi>0 THEN 1 END) AS cesit, COALESCE(SUM(tesir_adedi),0) AS adet FROM urunler WHERE aktif=1")->fetch(); ?>
+    <div class="col-xl-3 col-md-6">
+        <div class="card stat-card h-100 shadow-sm">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-warning bg-opacity-10 text-warning"><i class="bi bi-shop-window"></i></div>
+                <div>
+                    <div class="text-muted small">Teşhirde</div>
+                    <div class="fw-bold fs-5"><?= number_format($tesirOzet['adet']) ?> adet</div>
+                    <a href="<?= BASE_URL ?>/modules/stok/tesir.php" class="small text-decoration-none"><?= number_format($tesirOzet['cesit']) ?> çeşit →</a>
+                </div>
+            </div>
+        </div>
+    </div>
     <?php endif; ?>
 
     <?php if ($gorSatis): ?>

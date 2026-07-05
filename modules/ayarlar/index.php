@@ -12,7 +12,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'firma_adi','firma_slogan','firma_telefon','firma_email',
         'firma_adres','firma_sehir','firma_vergi_no','firma_vergi_daire','firma_iban',
         'site_basligi','para_birimi','para_sembol','kdv_orani',
-        'fatura_prefix','min_stok_uyari','tema_renk','tarih_formati','kayit_basi'
+        'fatura_prefix','min_stok_uyari','tema_renk','tarih_formati','kayit_basi',
+        'tesir_indirim','tesir_uyari_gun'
     ];
     foreach ($izinli as $key) {
         if (isset($_POST[$key])) {
@@ -195,6 +196,15 @@ require_once __DIR__ . '/../../includes/header.php';
                             <input type="number" name="min_stok_uyari" class="form-control"
                                    value="<?= (int)ayar('min_stok_uyari','1') ?>" min="0" max="999" style="max-width:120px">
                             <div class="form-text">Yeni ürün eklenirken otomatik atanır.</div>
+                            <hr>
+                            <label class="form-label fw-semibold">Teşhir İndirimi Önerisi (%)</label>
+                            <input type="number" name="tesir_indirim" class="form-control"
+                                   value="<?= (float)ayar('tesir_indirim','10') ?>" min="0" max="90" step="0.5" style="max-width:120px">
+                            <div class="form-text">Uzun süre teşhirde kalan ürünler için önerilen indirim oranı.</div>
+                            <label class="form-label fw-semibold mt-2">Teşhir Süre Uyarısı (gün)</label>
+                            <input type="number" name="tesir_uyari_gun" class="form-control"
+                                   value="<?= (int)ayar('tesir_uyari_gun','90') ?>" min="7" max="365" style="max-width:120px">
+                            <div class="form-text">Bu süreden uzun teşhirde kalan cihazlar uyarı olarak listelenir.</div>
                         </div>
                     </div>
                 </div>
