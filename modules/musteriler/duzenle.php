@@ -40,8 +40,14 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     if (!$hata) {
-        $pdo->prepare("UPDATE musteriler SET tip=?,ad=?,soyad=?,firma_adi=?,tc_no=?,vergi_no=?,telefon=?,telefon2=?,email=?,adres=?,sehir=?,notlar=? WHERE id=?")
-            ->execute([$d['tip']??'bireysel', trim($d['ad']), $d['soyad']??'', $d['firma_adi']??'', $tc, $vkn, $telefon, $telefon2, $email, $d['adres']??'', $d['sehir']??'', $d['notlar']??'', $id]);
+        if (($_SESSION['rol'] ?? '') === 'yonetici') {
+            $riskLimiti = max(0, round((float)($d['risk_limiti'] ?? 0), 2));
+            $pdo->prepare("UPDATE musteriler SET tip=?,ad=?,soyad=?,firma_adi=?,tc_no=?,vergi_no=?,telefon=?,telefon2=?,email=?,adres=?,sehir=?,notlar=?,risk_limiti=? WHERE id=?")
+                ->execute([$d['tip']??'bireysel', trim($d['ad']), $d['soyad']??'', $d['firma_adi']??'', $tc, $vkn, $telefon, $telefon2, $email, $d['adres']??'', $d['sehir']??'', $d['notlar']??'', $riskLimiti, $id]);
+        } else {
+            $pdo->prepare("UPDATE musteriler SET tip=?,ad=?,soyad=?,firma_adi=?,tc_no=?,vergi_no=?,telefon=?,telefon2=?,email=?,adres=?,sehir=?,notlar=? WHERE id=?")
+                ->execute([$d['tip']??'bireysel', trim($d['ad']), $d['soyad']??'', $d['firma_adi']??'', $tc, $vkn, $telefon, $telefon2, $email, $d['adres']??'', $d['sehir']??'', $d['notlar']??'', $id]);
+        }
         flash('basari', 'Müşteri güncellendi.');
         header('Location: detay.php?id=' . $id); exit;
     }
@@ -77,6 +83,13 @@ require_once __DIR__ . '/../../includes/header.php';
             <div class="col-md-4"><label class="form-label fw-semibold">Şehir</label><input type="text" name="sehir" class="form-control" value="<?= escH($d['sehir']??'') ?>"></div>
             <div class="col-md-4"><label class="form-label fw-semibold">Adres</label><textarea name="adres" class="form-control" rows="1"><?= escH($d['adres']??'') ?></textarea></div>
             <div class="col-12"><label class="form-label fw-semibold">Notlar</label><textarea name="notlar" class="form-control" rows="2"><?= escH($d['notlar']??'') ?></textarea></div>
+            <?php if (($_SESSION['rol'] ?? '') === 'yonetici'): ?>
+            <div class="col-md-4">
+                <label class="form-label fw-semibold">Risk Limiti (₺)</label>
+                <input type="number" name="risk_limiti" class="form-control" step="0.01" min="0" value="<?= escH($d['risk_limiti']??'0') ?>">
+                <div class="form-text">Açık borç bu tutarı aşınca satışta uyarı/engel devreye girer. 0 = sınırsız.</div>
+            </div>
+            <?php endif; ?>
         </div>
         <hr>
         <div class="d-flex gap-2">

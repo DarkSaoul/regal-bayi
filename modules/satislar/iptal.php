@@ -18,12 +18,19 @@ try {
     }
     $kalemler = $pdo->prepare("SELECT * FROM satis_kalemleri WHERE satis_id=?");
     $kalemler->execute([$id]); $kalemler = $kalemler->fetchAll();
-    foreach ($kalemler as $k) {
-        stokGuncelle($k['urun_id'], $k['miktar'], 'iade_giris', $satis['fatura_no'], 'İptal iadesi');
+    // Ön siparişte stok hiç düşülmediyse iade girişi yapılmaz;
+    // kısmi iadesi yapılmış kalemlerde yalnızca kalan miktar geri alınır.
+    if ($satis['stok_dusuldu']) {
+        foreach ($kalemler as $k) {
+            $kalan = (int)$k['miktar'] - (int)$k['iade_miktar'];
+            if ($kalan > 0) {
+                stokGuncelle($k['urun_id'], $kalan, 'iade_giris', $satis['fatura_no'], 'İptal iadesi');
+            }
+        }
+        // Satılmış seri no'ları depoya geri al
+        $pdo->prepare("UPDATE seri_numaralari SET durum='stokta', satis_id=NULL WHERE satis_id=? AND durum='satildi'")
+            ->execute([$id]);
     }
-    // Satılmış seri no'ları depoya geri al
-    $pdo->prepare("UPDATE seri_numaralari SET durum='stokta', satis_id=NULL WHERE satis_id=? AND durum='satildi'")
-        ->execute([$id]);
 
     $pdo->prepare("UPDATE satislar SET durum='iptal' WHERE id=?")->execute([$id]);
 

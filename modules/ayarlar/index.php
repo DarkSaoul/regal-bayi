@@ -13,7 +13,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'firma_adres','firma_sehir','firma_vergi_no','firma_vergi_daire','firma_iban',
         'site_basligi','para_birimi','para_sembol','kdv_orani',
         'fatura_prefix','min_stok_uyari','tema_renk','tarih_formati','kayit_basi',
-        'tesir_indirim','tesir_uyari_gun','sayim_periyot_gun'
+        'tesir_indirim','tesir_uyari_gun','sayim_periyot_gun',
+        'kasiyer_max_indirim','bekleyen_satis_uyari_gun','fatura_alt_not'
     ];
     foreach ($izinli as $key) {
         if (isset($_POST[$key])) {
@@ -56,6 +57,11 @@ require_once __DIR__ . '/../../includes/header.php';
         <li class="nav-item">
             <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-gorunum" type="button">
                 <i class="bi bi-palette"></i> Görünüm
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-satis" type="button">
+                <i class="bi bi-receipt"></i> Satış
             </button>
         </li>
     </ul>
@@ -294,6 +300,51 @@ require_once __DIR__ . '/../../includes/header.php';
                                     <?php endforeach; ?>
                                 </select>
                             </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Satış Ayarları ── -->
+        <div class="tab-pane fade" id="tab-satis">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header bg-white fw-semibold">
+                            <i class="bi bi-percent text-primary"></i> Kasiyer Yetkileri
+                        </div>
+                        <div class="card-body">
+                            <label class="form-label fw-semibold">Kasiyer Maksimum İndirim Yetkisi (%)</label>
+                            <input type="number" name="kasiyer_max_indirim" class="form-control"
+                                   value="<?= (float)ayar('kasiyer_max_indirim','0') ?>" min="0" max="100" step="0.5" style="max-width:140px">
+                            <div class="form-text">Kasiyer rolü bir satışta toplam indirimi bu oranın üzerine çıkaramaz (0 = sınırsız). Yönetici her zaman sınırsızdır. Zararına satış her durumda kasiyere kapalıdır.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header bg-white fw-semibold">
+                            <i class="bi bi-hourglass-split text-primary"></i> Bekleyen Satış Uyarısı
+                        </div>
+                        <div class="card-body">
+                            <label class="form-label fw-semibold">Kaç Gün Sonra Uyarılsın</label>
+                            <input type="number" name="bekleyen_satis_uyari_gun" class="form-control"
+                                   value="<?= (int)ayar('bekleyen_satis_uyari_gun','3') ?>" min="1" max="90" style="max-width:140px">
+                            <div class="form-text">"Bekliyor" durumunda bu süreden uzun kalan satışlar, satış listesinde kırmızı gün rozetiyle işaretlenir.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-12">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-white fw-semibold">
+                            <i class="bi bi-file-earmark-text text-primary"></i> Fatura / Fiş Alt Notu
+                        </div>
+                        <div class="card-body">
+                            <label class="form-label fw-semibold">Alt Not</label>
+                            <textarea name="fatura_alt_not" class="form-control" rows="2" maxlength="500"
+                                      placeholder="Bizi tercih ettiğiniz için teşekkür ederiz."><?= escH(ayar('fatura_alt_not','')) ?></textarea>
+                            <div class="form-text">Fatura ve termal fiş çıktılarının altında görünür (garanti şartları, iade koşulları vb. için kullanılabilir).</div>
                         </div>
                     </div>
                 </div>

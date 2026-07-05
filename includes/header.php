@@ -10,6 +10,7 @@ $_nav_ozel = [
     'finans'       => ['taksit_takvimi.php' => 'taksit_takvimi', 'kapanis.php' => 'kapanis'],
     'raporlar'     => ['kar_zarar.php' => 'kar_zarar'],
     'kullanicilar' => ['aktivite.php' => 'aktivite'],
+    'satislar'     => ['teslimatlar.php' => 'teslimatlar', 'performans.php' => 'performans'],
 ];
 $mevcut_sayfa = $_nav_ozel[$_nav_modul][$_nav_script] ?? $_nav_modul;
 $_sayaclar       = bildirimSayaclari(); // 3 sayaç tek sorguda

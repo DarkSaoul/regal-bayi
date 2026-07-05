@@ -34,8 +34,9 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         }
     }
     if (!$hata) {
-        $pdo->prepare("INSERT INTO musteriler (tip,ad,soyad,firma_adi,tc_no,vergi_no,telefon,telefon2,email,adres,sehir,notlar) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)")
-            ->execute([$d['tip']??'bireysel', trim($d['ad']), $d['soyad']??'', $d['firma_adi']??'', $tc, $vkn, $telefon, $telefon2, $email, $d['adres']??'', $d['sehir']??'', $d['notlar']??'']);
+        $riskLimiti = (($_SESSION['rol'] ?? '') === 'yonetici') ? max(0, round((float)($d['risk_limiti'] ?? 0), 2)) : 0;
+        $pdo->prepare("INSERT INTO musteriler (tip,ad,soyad,firma_adi,tc_no,vergi_no,telefon,telefon2,email,adres,sehir,notlar,risk_limiti) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)")
+            ->execute([$d['tip']??'bireysel', trim($d['ad']), $d['soyad']??'', $d['firma_adi']??'', $tc, $vkn, $telefon, $telefon2, $email, $d['adres']??'', $d['sehir']??'', $d['notlar']??'', $riskLimiti]);
         $yeni_id = $pdo->lastInsertId();
         flash('basari', 'Müşteri kaydedildi.');
         // Eğer satıştan gelindiyse geri dön
@@ -115,6 +116,13 @@ require_once __DIR__ . '/../../includes/header.php';
                 <label class="form-label fw-semibold">Notlar</label>
                 <textarea name="notlar" class="form-control" rows="2"><?= escH($_POST['notlar']??'') ?></textarea>
             </div>
+            <?php if (($_SESSION['rol'] ?? '') === 'yonetici'): ?>
+            <div class="col-md-4">
+                <label class="form-label fw-semibold">Risk Limiti (₺)</label>
+                <input type="number" name="risk_limiti" class="form-control" step="0.01" min="0" value="<?= escH($_POST['risk_limiti']??'0') ?>">
+                <div class="form-text">Açık borç bu tutarı aşınca satışta uyarı/engel devreye girer. 0 = sınırsız.</div>
+            </div>
+            <?php endif; ?>
         </div>
         <hr>
         <div class="d-flex gap-2">

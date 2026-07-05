@@ -109,6 +109,15 @@ $enBorcluMusteriler = $pdo->query("
     FROM musteriler WHERE toplam_borc > 0 ORDER BY toplam_borc DESC LIMIT 5
 ")->fetchAll();
 
+// ── Bugünkü teslimatlar ──────────────────────────────────────
+$bugunTeslimatlar = $gorSatis ? $pdo->query("
+    SELECT s.id, s.fatura_no, s.teslimat_durum, s.montaj_tarihi,
+           CONCAT(m.ad,' ',COALESCE(m.soyad,'')) AS musteri_adi, m.telefon
+    FROM satislar s LEFT JOIN musteriler m ON s.musteri_id=m.id
+    WHERE s.teslimat_tarihi = CURDATE() AND s.teslimat_durum != 'yok' AND s.durum != 'iptal'
+    ORDER BY s.teslimat_durum
+")->fetchAll() : [];
+
 // ── Yaklaşan tedarikçi ödemeleri (14 gün, vadeli borç) ───────
 // Vadeli borç kalemi olan ve hâlâ açık borcu bulunan tedarikçiler
 $yaklasanTedarikci = $gorFinans ? $pdo->query("
@@ -551,6 +560,33 @@ if ($gorStok) {
             <?php endif; ?>
             </div>
         </div>
+    </div>
+</div>
+<?php endif; ?>
+
+<?php if ($gorSatis && !empty($bugunTeslimatlar)): ?>
+<!-- ── Bugünkü Teslimatlar ───────────────────────────────────── -->
+<div class="card shadow-sm mb-3">
+    <div class="card-header bg-white fw-semibold d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-truck text-info"></i> Bugünkü Teslimatlar</span>
+        <a href="<?= BASE_URL ?>/modules/satislar/teslimatlar.php" class="btn btn-sm btn-outline-primary">Tümü</a>
+    </div>
+    <div class="card-body p-0">
+    <ul class="list-group list-group-flush">
+        <?php
+        $tdEtiketD = ['hazirlaniyor'=>'Hazırlanıyor','yolda'=>'Yolda','teslim_edildi'=>'Teslim Edildi'];
+        $tdRenkD   = ['hazirlaniyor'=>'warning text-dark','yolda'=>'info text-dark','teslim_edildi'=>'success'];
+        foreach ($bugunTeslimatlar as $bt): ?>
+        <li class="list-group-item d-flex justify-content-between align-items-center py-2">
+            <div>
+                <a href="<?= BASE_URL ?>/modules/satislar/detay.php?id=<?= $bt['id'] ?>" class="text-decoration-none fw-semibold"><?= escH($bt['fatura_no']) ?></a>
+                <span class="text-muted small"> — <?= escH($bt['musteri_adi'] ?: 'Perakende') ?></span>
+                <?php if ($bt['montaj_tarihi'] === $bugun): ?><span class="badge bg-secondary ms-1">Montaj bugün</span><?php endif; ?>
+            </div>
+            <span class="badge bg-<?= $tdRenkD[$bt['teslimat_durum']] ?>"><?= $tdEtiketD[$bt['teslimat_durum']] ?></span>
+        </li>
+        <?php endforeach; ?>
+    </ul>
     </div>
 </div>
 <?php endif; ?>

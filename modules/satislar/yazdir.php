@@ -14,6 +14,9 @@ $kalemler->execute([$id]); $kalemler = $kalemler->fetchAll();
 
 $taksitPlani = $pdo->prepare("SELECT * FROM taksit_plani WHERE satis_id=? ORDER BY taksit_no");
 $taksitPlani->execute([$id]); $taksitPlani = $taksitPlani->fetchAll();
+
+$proto = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off') ? 'https' : 'http';
+$satisUrl = $proto . '://' . ($_SERVER['HTTP_HOST'] ?? 'localhost') . BASE_URL . '/modules/satislar/detay.php?id=' . $id;
 ?>
 <!DOCTYPE html>
 <html lang="tr">
@@ -194,6 +197,11 @@ tr:nth-child(even) td { background: #f9f9f9; }
     </table>
     <?php endif; ?>
 
+    <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px">
+        <div style="font-size:10px;color:#555;max-width:600px"><?= nl2br(escH(ayar('fatura_alt_not', ''))) ?></div>
+        <div id="qrKutu"></div>
+    </div>
+
     <div class="footer-note">
         <?= escH(ayar('firma_adi','Regal Bayi')) ?> &bull;
         <?php if(ayar('firma_telefon')): ?><?= escH(ayar('firma_telefon')) ?> &bull; <?php endif; ?>
@@ -201,5 +209,13 @@ tr:nth-child(even) td { background: #f9f9f9; }
         Belge tarihi: <?= date('d.m.Y H:i') ?>
     </div>
 </div>
+<script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+<script>
+if (typeof QRCode !== 'undefined') {
+    QRCode.toCanvas(<?= json_encode($satisUrl) ?>, {width:80, margin:1}, function (err, canvas) {
+        if (!err) document.getElementById('qrKutu').appendChild(canvas);
+    });
+}
+</script>
 </body>
 </html>

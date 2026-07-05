@@ -63,6 +63,12 @@
             <i class="bi bi-receipt"></i><span>Satışlar</span>
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link <?= navAktif('teslimatlar') ?>"
+           href="<?= BASE_URL ?>/modules/satislar/teslimatlar.php">
+            <i class="bi bi-truck"></i><span>Teslimatlar</span>
+        </a>
+    </li>
 
     <li class="sidebar-section-title">Finans</li>
     <li class="nav-item">
@@ -100,6 +106,12 @@
 
     <?php if (($_SESSION['rol'] ?? '') === 'yonetici'): ?>
     <li class="sidebar-section-title">Yönetim</li>
+    <li class="nav-item">
+        <a class="nav-link <?= navAktif('performans') ?>"
+           href="<?= BASE_URL ?>/modules/satislar/performans.php">
+            <i class="bi bi-person-badge"></i><span>Kasiyer Performansı</span>
+        </a>
+    </li>
     <li class="nav-item">
         <a class="nav-link <?= navAktif('kullanicilar') ?>"
            href="<?= BASE_URL ?>/modules/kullanicilar/">
