@@ -379,6 +379,60 @@ function musteriBorcuYenile(?int $musteri_id): void {
     )->execute([$musteri_id, $musteri_id]);
 }
 
+// ── Gider belgesi (fiş/fatura) yükleme ───────────────────────
+function giderBelgesiYukle(array $dosya): ?string {
+    if (($dosya['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return null;
+    if ($dosya['error'] !== UPLOAD_ERR_OK) throw new Exception('Belge yüklenemedi (hata kodu: ' . $dosya['error'] . ').');
+    if ($dosya['size'] > 5 * 1024 * 1024) throw new Exception('Belge en fazla 5 MB olabilir.');
+    $ext = strtolower(pathinfo($dosya['name'], PATHINFO_EXTENSION));
+    if (in_array($ext, ['jpg','jpeg','png','webp'], true)) {
+        $bilgi = @getimagesize($dosya['tmp_name']);
+        if (!$bilgi) throw new Exception('Geçersiz görsel dosyası.');
+    } elseif ($ext !== 'pdf') {
+        throw new Exception('Yalnızca JPG, PNG, WEBP veya PDF yüklenebilir.');
+    }
+    $dir = __DIR__ . '/../uploads/kasa/';
+    if (!is_dir($dir)) @mkdir($dir, 0777, true);
+    $ad = 'gider_' . date('YmdHis') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+    if (!move_uploaded_file($dosya['tmp_name'], $dir . $ad)) throw new Exception('Belge kaydedilemedi (dizin yazma izni).');
+    return $ad;
+}
+
+// ── Kasa / Finans ─────────────────────────────────────────────
+// Yalnızca onaylanmış hareketler bakiyeye dahil edilir (bekleyen/reddedilen giderler hariç).
+function kasaBakiyesi(string $hesap = 'kasa'): float {
+    $stmt = db()->prepare("SELECT COALESCE(SUM(CASE WHEN tip='giris' THEN tutar ELSE -tutar END),0)
+        FROM kasa_hareketleri WHERE hesap=? AND onay_durumu='onaylandi'");
+    $stmt->execute([$hesap]);
+    return (float)$stmt->fetchColumn();
+}
+
+// ── Tekrarlayan gider şablonları ──────────────────────────────
+// Vadesi gelmiş (bu dönem için henüz oluşturulmamış) aktif şablonları döner.
+function giderSablonlariVadesiGelenler(): array {
+    $sablonlar = db()->query("SELECT gs.*, kk.ad AS kategori_adi FROM gider_sablonlari gs
+        JOIN kasa_kategoriler kk ON gs.kategori_id=kk.id WHERE gs.aktif=1")->fetchAll();
+    $bugun = new DateTime();
+    $sonuc = [];
+    foreach ($sablonlar as $s) {
+        $gun = max(1, (int)$s['gun']);
+        if ($s['periyot'] === 'aylik') {
+            $gun = min($gun, (int)$bugun->format('t'));
+            $hedef = new DateTime($bugun->format('Y-m-') . str_pad($gun, 2, '0', STR_PAD_LEFT));
+        } else { // haftalik — gun: 1=Pazartesi..7=Pazar (ISO)
+            $hedef = clone $bugun;
+            $fark = $gun - (int)$bugun->format('N');
+            $hedef->modify(($fark >= 0 ? '+' : '') . $fark . ' days');
+        }
+        if ($hedef > $bugun) continue; // bu dönemin vadesi henüz gelmedi
+        $sonOlusturma = $s['son_olusturma'] ? new DateTime($s['son_olusturma']) : null;
+        if ($sonOlusturma && $sonOlusturma >= $hedef) continue; // bu dönem için zaten oluşturulmuş
+        $s['hedef_tarih'] = $hedef->format('Y-m-d');
+        $sonuc[] = $s;
+    }
+    return $sonuc;
+}
+
 // ── Ayarlar ───────────────────────────────────────────────────
 function ayar(string $anahtar, string $varsayilan = ''): string {
     if (!isset($GLOBALS['__ayar_cache'])) {
@@ -465,15 +519,17 @@ function bildirimSayaclari(): array {
               (SELECT COUNT(*) FROM urunler  WHERE stok_adedi <= min_stok AND aktif=1) AS dusuk_stok,
               (SELECT COUNT(*) FROM satislar WHERE kalan_tutar > 0 AND durum='bekliyor') AS bekleyen_odeme,
               (SELECT COUNT(*) FROM taksit_plani tp JOIN satislar s ON tp.satis_id=s.id
-                WHERE tp.odendi=0 AND tp.vade_tarihi < CURDATE() AND s.durum != 'iptal') AS gecikmis_taksit
+                WHERE tp.odendi=0 AND tp.vade_tarihi < CURDATE() AND s.durum != 'iptal') AS gecikmis_taksit,
+              (SELECT COUNT(*) FROM kasa_hareketleri WHERE onay_durumu='bekliyor') AS onay_bekleyen
         ")->fetch();
         $cache = [
             'dusuk_stok'      => (int)($row['dusuk_stok'] ?? 0),
             'bekleyen_odeme'  => (int)($row['bekleyen_odeme'] ?? 0),
             'gecikmis_taksit' => (int)($row['gecikmis_taksit'] ?? 0),
+            'onay_bekleyen'   => (int)($row['onay_bekleyen'] ?? 0),
         ];
     } catch (Exception $e) {
-        $cache = ['dusuk_stok' => 0, 'bekleyen_odeme' => 0, 'gecikmis_taksit' => 0];
+        $cache = ['dusuk_stok' => 0, 'bekleyen_odeme' => 0, 'gecikmis_taksit' => 0, 'onay_bekleyen' => 0];
     }
     return $cache;
 }
@@ -481,3 +537,4 @@ function bildirimSayaclari(): array {
 function minStokUyarilari(): int   { return bildirimSayaclari()['dusuk_stok']; }
 function bekleyenTahsilat(): int   { return bildirimSayaclari()['bekleyen_odeme']; }
 function gecikmisTaksitSayisi(): int { return bildirimSayaclari()['gecikmis_taksit']; }
+function onayBekleyenGiderSayisi(): int { return bildirimSayaclari()['onay_bekleyen']; }

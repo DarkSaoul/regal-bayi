@@ -89,6 +89,12 @@
             <i class="bi bi-door-closed"></i><span>Kasa Kapanışı</span>
         </a>
     </li>
+    <li class="nav-item">
+        <a class="nav-link <?= navAktif('vardiya') ?>"
+           href="<?= BASE_URL ?>/modules/finans/vardiya.php">
+            <i class="bi bi-arrow-left-right"></i><span>Vardiya</span>
+        </a>
+    </li>
 
     <li class="sidebar-section-title">Raporlar</li>
     <li class="nav-item">

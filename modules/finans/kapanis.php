@@ -7,6 +7,16 @@ $pdo = db();
 
 $tarih = gecerliTarih($_GET['tarih'] ?? '', date('Y-m-d'));
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['aksiyon'] ?? '') === 'kapanisi_onayla') {
+    csrfVerify(); yetki(['yonetici','kasiyer']);
+    if ($tarih === date('Y-m-d')) {
+        ayarKaydet('son_kapanis_tarihi', $tarih);
+        logla('kasa_kapanis_onay', 'finans', 0, 'Tarih: ' . $tarih);
+        flash('basari', 'Günlük kapanış onaylandı.');
+    }
+    header('Location: kapanis.php?tarih=' . $tarih); exit;
+}
+
 // Giriş — ödeme tipine göre
 $stmt = $pdo->prepare("
     SELECT odeme_tipi, SUM(tutar) AS toplam
@@ -16,10 +26,17 @@ $stmt = $pdo->prepare("
 $stmt->execute([$tarih]);
 $tahsilatlar = $stmt->fetchAll(PDO::FETCH_KEY_PAIR);
 
-// Nakit kasa girişleri (kasa_hareketleri)
-$stmt = $pdo->prepare("SELECT tip, kategori, SUM(tutar) AS toplam FROM kasa_hareketleri WHERE tarih=? GROUP BY tip, kategori");
+// Nakit kasa girişleri (kasa_hareketleri) — yalnızca onaylanmış ve nakit hesabı
+$stmt = $pdo->prepare("SELECT tip, kategori, SUM(tutar) AS toplam FROM kasa_hareketleri
+    WHERE tarih=? AND hesap='kasa' AND onay_durumu='onaylandi' GROUP BY tip, kategori");
 $stmt->execute([$tarih]);
 $kasaHareketler = $stmt->fetchAll();
+
+// Banka hesabı (kart/havale tahsilat ve giderleri) — bilgi amaçlı ayrı gösterilir
+$stmtBanka = $pdo->prepare("SELECT COALESCE(SUM(CASE WHEN tip='giris' THEN tutar ELSE -tutar END),0) FROM kasa_hareketleri
+    WHERE tarih=? AND hesap='banka' AND onay_durumu='onaylandi'");
+$stmtBanka->execute([$tarih]);
+$bankaNet = (float)$stmtBanka->fetchColumn();
 
 $kasaGiris = 0; $kasaCikis = 0;
 $girisDtl = []; $cikisDtl = [];
@@ -42,11 +59,24 @@ $stmt->execute([$tarih]); $yeniMusteri = $stmt->fetchColumn();
 
 require_once __DIR__ . '/../../includes/header.php';
 ?>
-<div class="page-header d-flex justify-content-between align-items-center">
-    <h4><i class="bi bi-door-closed text-primary"></i> Kasa Kapanışı</h4>
-    <button onclick="window.print()" class="btn btn-outline-secondary btn-sm no-print">
-        <i class="bi bi-printer"></i> Yazdır
-    </button>
+
+<?php $kapanisOnaylandi = ayar('son_kapanis_tarihi', '') === $tarih; ?>
+<div class="page-header d-flex justify-content-between align-items-center flex-wrap gap-2">
+    <h4><i class="bi bi-door-closed text-primary"></i> Kasa Kapanışı
+        <?php if ($kapanisOnaylandi): ?><span class="badge bg-success ms-1"><i class="bi bi-check-circle"></i> Onaylandı</span><?php endif; ?>
+    </h4>
+    <div class="d-flex gap-2 no-print">
+        <?php if ($tarih === date('Y-m-d') && !$kapanisOnaylandi): ?>
+        <form method="post" onsubmit="return confirm('Bugünün kasa kapanışı onaylanacak. Onaylıyor musunuz?')">
+            <?= csrfField() ?>
+            <input type="hidden" name="aksiyon" value="kapanisi_onayla">
+            <button type="submit" class="btn btn-success btn-sm"><i class="bi bi-check-circle"></i> Kapanışı Onayla</button>
+        </form>
+        <?php endif; ?>
+        <button onclick="window.print()" class="btn btn-outline-secondary btn-sm">
+            <i class="bi bi-printer"></i> Yazdır
+        </button>
+    </div>
 </div>
 
 <!-- Tarih Seç -->
@@ -96,6 +126,17 @@ require_once __DIR__ . '/../../includes/header.php';
             <div class="card-body text-center">
                 <div class="small opacity-75">Net Kasa (Nakit)</div>
                 <div class="fw-bold fs-4"><?= para($kasaGiris - $kasaCikis) ?></div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<div class="row g-3 mb-3">
+    <div class="col-md-3 offset-md-9">
+        <div class="card shadow-sm border-0 <?= $bankaNet>=0?'bg-info':'bg-danger' ?> text-white">
+            <div class="card-body text-center">
+                <div class="small opacity-75">Net Banka (Kart/Havale)</div>
+                <div class="fw-bold fs-4"><?= para($bankaNet) ?></div>
             </div>
         </div>
     </div>

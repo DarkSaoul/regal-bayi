@@ -37,11 +37,18 @@ try {
     // Ödenmemiş taksitleri iptal et (planı sil) — gecikmiş taksit sayaçlarını kirletmesin
     $pdo->prepare("DELETE FROM taksit_plani WHERE satis_id=? AND odendi=0")->execute([$id]);
 
-    // Müşteriye/nakite iade: ödenen tutar varsa kasadan çıkış yaz
+    // Müşteriye iade: alınan ödemelerin hangi hesaba (nakit→kasa, kart/havale→banka) girdiğine göre çıkış yazılır
     if ($satis['odenen_tutar'] > 0) {
-        $pdo->prepare("INSERT INTO kasa_hareketleri (tarih,tip,tutar,aciklama,kategori,kullanici_id) VALUES (?,?,?,?,?,?)")
-            ->execute([date('Y-m-d'), 'cikis', $satis['odenen_tutar'],
-                       'Satış iptali iadesi: ' . $satis['fatura_no'], 'İade', $_SESSION['kullanici_id']]);
+        $odemeToplam = $pdo->prepare("SELECT odeme_tipi, SUM(tutar) AS toplam FROM odemeler WHERE satis_id=? GROUP BY odeme_tipi");
+        $odemeToplam->execute([$id]);
+        foreach ($odemeToplam->fetchAll() as $ot) {
+            $tutar = round((float)$ot['toplam'], 2);
+            if ($tutar <= 0) continue;
+            $hesap = $ot['odeme_tipi'] === 'nakit' ? 'kasa' : 'banka';
+            $pdo->prepare("INSERT INTO kasa_hareketleri (tarih,tip,hesap,tutar,aciklama,kategori,kullanici_id) VALUES (?,?,?,?,?,?,?)")
+                ->execute([date('Y-m-d'), 'cikis', $hesap, $tutar,
+                           'Satış iptali iadesi: ' . $satis['fatura_no'], 'İade', $_SESSION['kullanici_id']]);
+        }
     }
 
     // Müşteri borcunu açık satışlardan yeniden hesapla

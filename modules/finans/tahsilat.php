@@ -79,11 +79,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         // Müşteri borcunu açık satışlardan yeniden hesapla
         musteriBorcuYenile($satisRow['musteri_id'] ? (int)$satisRow['musteri_id'] : null);
 
-        // Kasa = fiziksel nakit çekmecesi; yalnızca nakit tahsilat işlenir
-        if ($tip === 'nakit') {
-            $pdo->prepare("INSERT INTO kasa_hareketleri (tarih,tip,tutar,aciklama,kategori,odeme_id,kullanici_id) VALUES (?,?,?,?,?,?,?)")
-                ->execute([$tarih, 'giris', $tutar, 'Tahsilat: '.$satisRow['fatura_no'], 'Tahsilat', $odeme_id, $_SESSION['kullanici_id']]);
-        }
+        // Nakit → kasa hesabı, kart/havale → banka hesabı
+        $hesap = $tip === 'nakit' ? 'kasa' : 'banka';
+        $pdo->prepare("INSERT INTO kasa_hareketleri (tarih,tip,hesap,tutar,aciklama,kategori,odeme_id,kullanici_id) VALUES (?,?,?,?,?,?,?,?)")
+            ->execute([$tarih, 'giris', $hesap, $tutar, 'Tahsilat: '.$satisRow['fatura_no'], 'Tahsilat', $odeme_id, $_SESSION['kullanici_id']]);
         $pdo->commit();
         logla('tahsilat', 'finans', $sid, 'Fatura: '.$satisRow['fatura_no'].' | '.para($tutar));
         flash('basari', para($tutar) . ' tahsilat alındı.');

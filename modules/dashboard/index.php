@@ -73,7 +73,26 @@ $aylikBrutKar = (float)$karRow['brut_kar'];
 $aylikKarMarji = $karRow['net_satis'] > 0 ? round($aylikBrutKar / $karRow['net_satis'] * 100, 1) : 0;
 
 // ── Kasa bakiyesi ────────────────────────────────────────────
-$kasaBakiye = (float)$pdo->query("SELECT COALESCE(SUM(CASE WHEN tip='giris' THEN tutar ELSE -tutar END),0) FROM kasa_hareketleri")->fetchColumn();
+$kasaBakiye = kasaBakiyesi('kasa');
+$bankaBakiye = kasaBakiyesi('banka');
+$minBakiyeUyari = (float)ayar('kasa_min_bakiye_uyari', '0');
+$dusukKasaBakiyesi = $minBakiyeUyari > 0 && $kasaBakiye < $minBakiyeUyari;
+$onayBekleyenGider = $isYon ? onayBekleyenGiderSayisi() : 0;
+
+// ── Son 7 gün kasa trend (mini grafik) ────────────────────────
+$kasaTrend = $pdo->query("
+    SELECT tarih, SUM(CASE WHEN tip='giris' THEN tutar ELSE -tutar END) AS net
+    FROM kasa_hareketleri WHERE hesap='kasa' AND onay_durumu='onaylandi' AND tarih >= DATE_SUB(CURDATE(), INTERVAL 6 DAY)
+    GROUP BY tarih ORDER BY tarih
+")->fetchAll(PDO::FETCH_KEY_PAIR);
+$kasaTrendGunler = [];
+for ($i = 6; $i >= 0; $i--) {
+    $g = date('Y-m-d', strtotime("-$i days"));
+    $kasaTrendGunler[$g] = (float)($kasaTrend[$g] ?? 0);
+}
+
+// ── Kapanış hatırlatması (akşam saatlerinde, bugün onaylanmadıysa) ───
+$kapanisHatirlat = $gorKasa && (int)date('H') >= 18 && ayar('son_kapanis_tarihi', '') !== $bugun;
 
 // ── Tedarikçi borçları toplamı ───────────────────────────────
 $tedarikciBorc = (float)$pdo->query("SELECT COALESCE(SUM(toplam_borc),0) FROM tedarikciler")->fetchColumn();
@@ -364,13 +383,26 @@ require_once __DIR__ . '/../../includes/header.php';
     <?php if ($gorKasa): ?>
     <!-- Kasa Bakiyesi -->
     <div class="col-xl-3 col-md-6">
-        <div class="card stat-card h-100 shadow-sm">
+        <div class="card stat-card h-100 shadow-sm <?= $dusukKasaBakiyesi ? 'border-danger' : '' ?>">
             <div class="card-body d-flex align-items-center gap-3">
-                <div class="stat-icon bg-primary bg-opacity-10 text-primary"><i class="bi bi-wallet2"></i></div>
+                <div class="stat-icon <?= $dusukKasaBakiyesi ? 'bg-danger bg-opacity-10 text-danger' : 'bg-primary bg-opacity-10 text-primary' ?>"><i class="bi bi-wallet2"></i></div>
                 <div>
                     <div class="text-muted small">Kasa Bakiyesi</div>
-                    <div class="fw-bold fs-5 <?= $kasaBakiye>=0?'':'text-danger' ?>"><?= para($kasaBakiye) ?></div>
+                    <div class="fw-bold fs-5 <?= $kasaBakiye>=0 && !$dusukKasaBakiyesi ?'':'text-danger' ?>"><?= para($kasaBakiye) ?></div>
                     <a href="<?= BASE_URL ?>/modules/finans/" class="small text-decoration-none">Kasa detayı →</a>
+                </div>
+            </div>
+        </div>
+    </div>
+    <!-- Banka Bakiyesi -->
+    <div class="col-xl-3 col-md-6">
+        <div class="card stat-card h-100 shadow-sm">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-info bg-opacity-10 text-info"><i class="bi bi-bank"></i></div>
+                <div>
+                    <div class="text-muted small">Banka Bakiyesi</div>
+                    <div class="fw-bold fs-5"><?= para($bankaBakiye) ?></div>
+                    <div class="small text-muted">Kart + Havale</div>
                 </div>
             </div>
         </div>
@@ -490,8 +522,35 @@ if ($gorStok) {
     } catch (Exception $e) {}
 }
 ?>
-<?php if (($gorStok && ($dusukStok > 0 || $sayimGecikti)) || ($gorSatis && $gecmisKisat > 0)): ?>
+<?php if (($gorStok && ($dusukStok > 0 || $sayimGecikti)) || ($gorSatis && $gecmisKisat > 0) || ($gorKasa && ($dusukKasaBakiyesi || $kapanisHatirlat)) || ($isYon && $onayBekleyenGider > 0)): ?>
 <div class="row g-3 mb-3">
+    <?php if ($gorKasa && $dusukKasaBakiyesi): ?>
+    <div class="col-md-6">
+        <div class="alert alert-danger d-flex align-items-center gap-2 mb-0">
+            <i class="bi bi-wallet2 fs-5 flex-shrink-0"></i>
+            <span>Kasa bakiyesi (<strong><?= para($kasaBakiye) ?></strong>) uyarı eşiğinin altında.</span>
+            <a href="<?= BASE_URL ?>/modules/finans/" class="btn btn-sm btn-danger ms-auto">Kasaya Git</a>
+        </div>
+    </div>
+    <?php endif; ?>
+    <?php if ($gorKasa && $kapanisHatirlat): ?>
+    <div class="col-md-6">
+        <div class="alert alert-warning d-flex align-items-center gap-2 mb-0">
+            <i class="bi bi-door-closed fs-5 flex-shrink-0"></i>
+            <span>Bugünün <strong>kasa kapanışı</strong> henüz onaylanmadı.</span>
+            <a href="<?= BASE_URL ?>/modules/finans/kapanis.php" class="btn btn-sm btn-warning ms-auto">Kapanışa Git</a>
+        </div>
+    </div>
+    <?php endif; ?>
+    <?php if ($isYon && $onayBekleyenGider > 0): ?>
+    <div class="col-md-6">
+        <div class="alert alert-warning d-flex align-items-center gap-2 mb-0">
+            <i class="bi bi-hourglass-split fs-5 flex-shrink-0"></i>
+            <span><strong><?= $onayBekleyenGider ?> gider</strong> onay bekliyor.</span>
+            <a href="<?= BASE_URL ?>/modules/finans/onay.php" class="btn btn-sm btn-warning ms-auto">Onaylara Git</a>
+        </div>
+    </div>
+    <?php endif; ?>
     <?php if ($gorStok && $sayimGecikti): ?>
     <div class="col-md-6">
         <div class="alert alert-warning d-flex align-items-center gap-2 mb-0">
@@ -520,6 +579,19 @@ if ($gorStok) {
         </div>
     </div>
     <?php endif; ?>
+</div>
+<?php endif; ?>
+
+<?php if ($gorKasa): ?>
+<!-- ── Kasa Mini Trend (Son 7 Gün) ────────────────────────────── -->
+<div class="card shadow-sm mb-3">
+    <div class="card-header bg-white fw-semibold py-2 d-flex justify-content-between align-items-center">
+        <span><i class="bi bi-graph-up text-primary"></i> Kasa Net Hareketi <small class="text-muted fw-normal">(Son 7 Gün)</small></span>
+        <a href="<?= BASE_URL ?>/modules/finans/" class="btn btn-sm btn-outline-primary">Kasa & Finans</a>
+    </div>
+    <div class="card-body py-2">
+        <canvas id="kasaTrendGrafik" height="60"></canvas>
+    </div>
 </div>
 <?php endif; ?>
 
@@ -759,6 +831,23 @@ if (_satisGrafikEl) document.addEventListener('DOMContentLoaded', () => new Char
         plugins: { legend: { display: false } },
         scales: { y: { beginAtZero: true } }
     }
+}));
+
+// ── Kasa Mini Trend (son 7 gün) ───────────────────────────────
+const _kasaTrendEl = document.getElementById('kasaTrendGrafik');
+if (_kasaTrendEl) document.addEventListener('DOMContentLoaded', () => new Chart(_kasaTrendEl, {
+    type: 'line',
+    data: {
+        labels: <?= json_encode(array_map(fn($g) => date('d.m', strtotime($g)), array_keys($kasaTrendGunler))) ?>,
+        datasets: [{
+            label: 'Net Kasa Hareketi',
+            data: <?= json_encode(array_map(fn($v) => round($v, 2), array_values($kasaTrendGunler))) ?>,
+            borderColor: 'rgba(13,110,253,1)',
+            backgroundColor: 'rgba(13,110,253,.1)',
+            fill: true, tension: .3
+        }]
+    },
+    options: { responsive: true, plugins: { legend: { display: false } } }
 }));
 
 // ── Hava Durumu ───────────────────────────────────────────────

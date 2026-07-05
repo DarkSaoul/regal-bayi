@@ -37,3 +37,7 @@ install/installed.lock
 # Yüklenen ürün görselleri
 uploads/urunler/*
 !uploads/urunler/.gitkeep
+
+# Yüklenen gider belgeleri (fiş/fatura)
+uploads/kasa/*
+!uploads/kasa/.gitkeep

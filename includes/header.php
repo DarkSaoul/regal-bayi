@@ -7,7 +7,7 @@ $_nav_modul  = basename(dirname($_SERVER['PHP_SELF']));
 $_nav_ozel = [
     'stok'         => ['tesir.php' => 'tesir', 'sayim.php' => 'sayim', 'sayim_gecmis.php' => 'sayim'],
     'urunler'      => ['toplu_fiyat.php' => 'toplu_fiyat'],
-    'finans'       => ['taksit_takvimi.php' => 'taksit_takvimi', 'kapanis.php' => 'kapanis'],
+    'finans'       => ['taksit_takvimi.php' => 'taksit_takvimi', 'kapanis.php' => 'kapanis', 'vardiya.php' => 'vardiya'],
     'raporlar'     => ['kar_zarar.php' => 'kar_zarar'],
     'kullanicilar' => ['aktivite.php' => 'aktivite'],
     'satislar'     => ['teslimatlar.php' => 'teslimatlar', 'performans.php' => 'performans'],
@@ -17,6 +17,7 @@ $_sayaclar       = bildirimSayaclari(); // 3 sayaç tek sorguda
 $uyari_stok      = $_sayaclar['dusuk_stok'];
 $bekleyen_odeme  = $_sayaclar['bekleyen_odeme'];
 $geckmis_taksit  = $_sayaclar['gecikmis_taksit'];
+$onay_bekleyen   = $_sayaclar['onay_bekleyen'];
 
 // Tema rengi
 $_tema = ayar('tema_renk', 'primary');
@@ -119,6 +120,14 @@ function navAktif($sayfa) {
            title="Gecikmiş Taksit">
             <i class="bi bi-calendar-x"></i>
             <span class="d-none d-md-inline"><?= $geckmis_taksit ?></span>
+        </a>
+        <?php endif; ?>
+        <?php if ($onay_bekleyen > 0 && ($_SESSION['rol'] ?? '') === 'yonetici'): ?>
+        <a href="<?= BASE_URL ?>/modules/finans/onay.php"
+           class="btn btn-sm btn-warning py-0 px-2 d-flex align-items-center gap-1"
+           title="Onay Bekleyen Gider">
+            <i class="bi bi-hourglass-split"></i>
+            <span class="d-none d-md-inline"><?= $onay_bekleyen ?></span>
         </a>
         <?php endif; ?>
     </div>

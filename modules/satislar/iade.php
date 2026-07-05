@@ -109,10 +109,11 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             }
         }
 
-        // Para iadesi: yalnızca nakit iade kasadan çıkar (kasa = fiziksel çekmece)
-        if ($paraIade > 0 && $yontem === 'nakit') {
-            $pdo->prepare("INSERT INTO kasa_hareketleri (tarih,tip,tutar,aciklama,kategori,kullanici_id) VALUES (?,?,?,?,?,?)")
-                ->execute([date('Y-m-d'), 'cikis', $paraIade, 'Kısmi iade: ' . $satisRow['fatura_no'], 'İade', $_SESSION['kullanici_id']]);
+        // Para iadesi: nakit → kasa hesabından, kart/havale → banka hesabından çıkar
+        if ($paraIade > 0) {
+            $hesap = $yontem === 'nakit' ? 'kasa' : 'banka';
+            $pdo->prepare("INSERT INTO kasa_hareketleri (tarih,tip,hesap,tutar,aciklama,kategori,kullanici_id) VALUES (?,?,?,?,?,?,?)")
+                ->execute([date('Y-m-d'), 'cikis', $hesap, $paraIade, 'Kısmi iade: ' . $satisRow['fatura_no'], 'İade', $_SESSION['kullanici_id']]);
         }
 
         musteriBorcuYenile($satisRow['musteri_id'] ? (int)$satisRow['musteri_id'] : null);

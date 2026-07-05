@@ -240,23 +240,23 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 // Taksitli satışta ilk ödeme taksit_no=1 olarak kaydedilir
                 $ilk_taksit_no = ($odeme_tipi === 'taksitli') ? 1 : null;
                 if ($odeme_tipi === 'bolunmus') {
-                    // Her kanal ayrı ödeme kaydı; kasa yalnızca nakit parçayı görür
+                    // Her kanal ayrı ödeme kaydı; nakit kasa hesabına, kart/havale banka hesabına işlenir
                     foreach ($parcalar as $kanal => $tutar) {
                         $pdo->prepare("INSERT INTO odemeler (satis_id,musteri_id,tarih,tutar,odeme_tipi,taksit_no,aciklama,kullanici_id) VALUES (?,?,?,?,?,?,?,?)")
                             ->execute([$satis_id, $musteri, $tarih, $tutar, $kanal, null, 'Satış (bölünmüş) - '.$fatura_no, $_SESSION['kullanici_id']]);
-                    }
-                    if (isset($parcalar['nakit'])) {
-                        $pdo->prepare("INSERT INTO kasa_hareketleri (tarih,tip,tutar,aciklama,kategori,kullanici_id) VALUES (?,?,?,?,?,?)")
-                            ->execute([$tarih, 'giris', $parcalar['nakit'], 'Satış: '.$fatura_no.' (bölünmüş-nakit)', 'Satış', $_SESSION['kullanici_id']]);
+                        $hesap = $kanal === 'nakit' ? 'kasa' : 'banka';
+                        $pdo->prepare("INSERT INTO kasa_hareketleri (tarih,tip,hesap,tutar,aciklama,kategori,kullanici_id) VALUES (?,?,?,?,?,?,?)")
+                            ->execute([$tarih, 'giris', $hesap, $tutar, 'Satış: '.$fatura_no.' (bölünmüş-'.$kanal.')', 'Satış', $_SESSION['kullanici_id']]);
                     }
                 } else {
                     $odeme_kanali = $odeme_tipi === 'taksitli' ? 'nakit' : $odeme_tipi;
                     $pdo->prepare("INSERT INTO odemeler (satis_id,musteri_id,tarih,tutar,odeme_tipi,taksit_no,aciklama,kullanici_id) VALUES (?,?,?,?,?,?,?,?)")
                         ->execute([$satis_id, $musteri, $tarih, $odenen, $odeme_kanali, $ilk_taksit_no, 'Satış - '.$fatura_no, $_SESSION['kullanici_id']]);
-                    // Kasa = fiziksel nakit çekmecesi; yalnızca nakit ödemeler işlenir
-                    if ($odeme_kanali === 'nakit') {
-                        $pdo->prepare("INSERT INTO kasa_hareketleri (tarih,tip,tutar,aciklama,kategori,kullanici_id) VALUES (?,?,?,?,?,?)")
-                            ->execute([$tarih, 'giris', $odenen, 'Satış: '.$fatura_no, 'Satış', $_SESSION['kullanici_id']]);
+                    // Nakit → kasa hesabı, kart/havale → banka hesabı (kasa = fiziksel çekmece değil artık tek hesap değil)
+                    $hesap = $odeme_kanali === 'nakit' ? 'kasa' : ($odeme_kanali === 'kredi_karti' || $odeme_kanali === 'havale' ? 'banka' : null);
+                    if ($hesap) {
+                        $pdo->prepare("INSERT INTO kasa_hareketleri (tarih,tip,hesap,tutar,aciklama,kategori,kullanici_id) VALUES (?,?,?,?,?,?,?)")
+                            ->execute([$tarih, 'giris', $hesap, $odenen, 'Satış: '.$fatura_no, 'Satış', $_SESSION['kullanici_id']]);
                     }
                 }
             }

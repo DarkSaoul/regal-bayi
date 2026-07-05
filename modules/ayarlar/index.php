@@ -14,7 +14,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'site_basligi','para_birimi','para_sembol','kdv_orani',
         'fatura_prefix','min_stok_uyari','tema_renk','tarih_formati','kayit_basi',
         'tesir_indirim','tesir_uyari_gun','sayim_periyot_gun',
-        'kasiyer_max_indirim','bekleyen_satis_uyari_gun','fatura_alt_not'
+        'kasiyer_max_indirim','bekleyen_satis_uyari_gun','fatura_alt_not',
+        'kasa_min_bakiye_uyari','gider_onay_limiti'
     ];
     foreach ($izinli as $key) {
         if (isset($_POST[$key])) {
@@ -62,6 +63,11 @@ require_once __DIR__ . '/../../includes/header.php';
         <li class="nav-item">
             <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-satis" type="button">
                 <i class="bi bi-receipt"></i> Satış
+            </button>
+        </li>
+        <li class="nav-item">
+            <button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-finans" type="button">
+                <i class="bi bi-cash-stack"></i> Finans
             </button>
         </li>
     </ul>
@@ -345,6 +351,38 @@ require_once __DIR__ . '/../../includes/header.php';
                             <textarea name="fatura_alt_not" class="form-control" rows="2" maxlength="500"
                                       placeholder="Bizi tercih ettiğiniz için teşekkür ederiz."><?= escH(ayar('fatura_alt_not','')) ?></textarea>
                             <div class="form-text">Fatura ve termal fiş çıktılarının altında görünür (garanti şartları, iade koşulları vb. için kullanılabilir).</div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- ── Finans Ayarları ── -->
+        <div class="tab-pane fade" id="tab-finans">
+            <div class="row g-3">
+                <div class="col-md-6">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header bg-white fw-semibold">
+                            <i class="bi bi-wallet2 text-primary"></i> Düşük Kasa Bakiyesi Uyarısı
+                        </div>
+                        <div class="card-body">
+                            <label class="form-label fw-semibold">Uyarı Eşiği (₺)</label>
+                            <input type="number" name="kasa_min_bakiye_uyari" class="form-control"
+                                   value="<?= (float)ayar('kasa_min_bakiye_uyari','0') ?>" min="0" step="0.01" style="max-width:180px">
+                            <div class="form-text">Kasa (nakit) bakiyesi bu tutarın altına düşünce dashboard'da ve Kasa & Finans sayfasında uyarı gösterilir (0 = kapalı).</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-6">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header bg-white fw-semibold">
+                            <i class="bi bi-check2-square text-primary"></i> Gider Onay Limiti
+                        </div>
+                        <div class="card-body">
+                            <label class="form-label fw-semibold">Kasiyer İçin Onaysız Maksimum Gider (₺)</label>
+                            <input type="number" name="gider_onay_limiti" class="form-control"
+                                   value="<?= (float)ayar('gider_onay_limiti','0') ?>" min="0" step="0.01" style="max-width:180px">
+                            <div class="form-text">Kasiyer bu tutarın üzerinde bir çıkış (gider) girerse kayıt yönetici onayı bekler ve onaylanana kadar kasa bakiyesine yansımaz (0 = sınırsız, onay gerekmez). Yönetici her zaman doğrudan onaylı girer.</div>
                         </div>
                     </div>
                 </div>
