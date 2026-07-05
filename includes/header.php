@@ -5,7 +5,7 @@ if (session_status() === PHP_SESSION_NONE) session_start();
 $_nav_script = basename($_SERVER['PHP_SELF']);
 $_nav_modul  = basename(dirname($_SERVER['PHP_SELF']));
 $_nav_ozel = [
-    'stok'         => ['tesir.php' => 'tesir', 'sayim.php' => 'sayim'],
+    'stok'         => ['tesir.php' => 'tesir', 'sayim.php' => 'sayim', 'sayim_gecmis.php' => 'sayim'],
     'urunler'      => ['toplu_fiyat.php' => 'toplu_fiyat'],
     'finans'       => ['taksit_takvimi.php' => 'taksit_takvimi', 'kapanis.php' => 'kapanis'],
     'raporlar'     => ['kar_zarar.php' => 'kar_zarar'],

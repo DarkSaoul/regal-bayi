@@ -442,8 +442,29 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 
 <!-- ── Uyarılar (rol bazlı) ─────────────────────────────────── -->
-<?php if (($gorStok && $dusukStok > 0) || ($gorSatis && $gecmisKisat > 0)): ?>
+<?php
+// Sayım periyodu kontrolü (son sayımdan bu yana geçen gün)
+$sonSayim = null; $sayimGecikti = false;
+if ($gorStok) {
+    try {
+        $sonSayim = $pdo->query("SELECT MAX(created_at) FROM sayimlar")->fetchColumn() ?: null;
+        $periyot = max(7, (int)ayar('sayim_periyot_gun', '30'));
+        $sayimGecikti = !$sonSayim || (time() - strtotime($sonSayim)) / 86400 > $periyot;
+    } catch (Exception $e) {}
+}
+?>
+<?php if (($gorStok && ($dusukStok > 0 || $sayimGecikti)) || ($gorSatis && $gecmisKisat > 0)): ?>
 <div class="row g-3 mb-3">
+    <?php if ($gorStok && $sayimGecikti): ?>
+    <div class="col-md-6">
+        <div class="alert alert-warning d-flex align-items-center gap-2 mb-0">
+            <i class="bi bi-clipboard-check fs-5 flex-shrink-0"></i>
+            <span><strong>Sayım zamanı:</strong> <?= $sonSayim ? 'son sayım ' . tarih($sonSayim) : 'hiç sayım yapılmadı' ?>
+                (periyot: <?= (int)ayar('sayim_periyot_gun', '30') ?> gün).</span>
+            <a href="<?= BASE_URL ?>/modules/stok/sayim.php" class="btn btn-sm btn-warning ms-auto">Sayıma Başla</a>
+        </div>
+    </div>
+    <?php endif; ?>
     <?php if ($gorStok && $dusukStok > 0): ?>
     <div class="col-md-6">
         <div class="alert alert-danger d-flex align-items-center gap-2 mb-0">

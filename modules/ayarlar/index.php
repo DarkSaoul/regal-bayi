@@ -13,7 +13,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'firma_adres','firma_sehir','firma_vergi_no','firma_vergi_daire','firma_iban',
         'site_basligi','para_birimi','para_sembol','kdv_orani',
         'fatura_prefix','min_stok_uyari','tema_renk','tarih_formati','kayit_basi',
-        'tesir_indirim','tesir_uyari_gun'
+        'tesir_indirim','tesir_uyari_gun','sayim_periyot_gun'
     ];
     foreach ($izinli as $key) {
         if (isset($_POST[$key])) {
@@ -205,6 +205,10 @@ require_once __DIR__ . '/../../includes/header.php';
                             <input type="number" name="tesir_uyari_gun" class="form-control"
                                    value="<?= (int)ayar('tesir_uyari_gun','90') ?>" min="7" max="365" style="max-width:120px">
                             <div class="form-text">Bu süreden uzun teşhirde kalan cihazlar uyarı olarak listelenir.</div>
+                            <label class="form-label fw-semibold mt-2">Sayım Periyodu (gün)</label>
+                            <input type="number" name="sayim_periyot_gun" class="form-control"
+                                   value="<?= (int)ayar('sayim_periyot_gun','30') ?>" min="7" max="365" style="max-width:120px">
+                            <div class="form-text">Son sayımın üzerinden bu süre geçince dashboard'da uyarı gösterilir.</div>
                         </div>
                     </div>
                 </div>

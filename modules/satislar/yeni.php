@@ -168,6 +168,17 @@ require_once __DIR__ . '/../../includes/header.php';
     <a href="index.php" class="btn btn-outline-secondary btn-sm">← Satışlar</a>
 </div>
 
+<?php
+// Son 30 dk içinde sayım sayfası açıldıysa bilgilendir (sayım sırasında satış farkı çakışma korumasıyla atlanır)
+$sayimAcilis = (int)ayar('sayim_son_acilis', '0');
+if ($sayimAcilis && (time() - $sayimAcilis) < 1800): ?>
+<div class="alert alert-info alert-dismissible py-2">
+    <i class="bi bi-clipboard-check"></i> Şu anda <strong>stok sayımı yapılıyor olabilir</strong> (sayım ekranı son 30 dk içinde açıldı).
+    Satış yapabilirsiniz; sayım tarafında bu ürünler çakışma koruması ile atlanır.
+    <button type="button" class="btn-close" data-bs-dismiss="alert"></button>
+</div>
+<?php endif; ?>
+
 <?php if ($hata): ?>
 <div class="alert alert-danger alert-dismissible"><i class="bi bi-exclamation-triangle"></i> <?= escH($hata) ?>
     <button type="button" class="btn-close" data-bs-dismiss="alert"></button>

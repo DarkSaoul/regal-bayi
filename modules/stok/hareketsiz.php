@@ -56,6 +56,10 @@ require_once __DIR__ . '/../../includes/header.php';
                 <?php endforeach; ?>
             </select>
         </form>
+        <?php if ($urunler && in_array($_SESSION['rol'] ?? '', ['yonetici','depo'], true)): ?>
+        <a href="sayim.php?ids=<?= implode(',', array_column($urunler, 'id')) ?>" class="btn btn-sm btn-outline-primary"
+           title="Hareketsiz ürünler kayıp/çalıntı adayıdır — sayarak doğrulayın"><i class="bi bi-clipboard-check"></i> Bu Listeyi Say</a>
+        <?php endif; ?>
         <a href="?gun=<?= $gun ?>&export=csv" class="btn btn-sm btn-outline-success"><i class="bi bi-filetype-csv"></i> CSV</a>
         <a href="index.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left"></i> Stok</a>
     </div>
