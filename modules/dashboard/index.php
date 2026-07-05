@@ -111,7 +111,7 @@ $enBorcluMusteriler = $pdo->query("
 
 // ── Bugünkü teslimatlar ──────────────────────────────────────
 $bugunTeslimatlar = $gorSatis ? $pdo->query("
-    SELECT s.id, s.fatura_no, s.teslimat_durum, s.montaj_tarihi,
+    SELECT s.id, s.fatura_no, s.teslimat_durum, s.montaj_tarihi, s.servis_firma,
            CONCAT(m.ad,' ',COALESCE(m.soyad,'')) AS musteri_adi, m.telefon
     FROM satislar s LEFT JOIN musteriler m ON s.musteri_id=m.id
     WHERE s.teslimat_tarihi = CURDATE() AND s.teslimat_durum != 'yok' AND s.durum != 'iptal'
@@ -597,13 +597,13 @@ if ($gorStok) {
     <div class="card-body p-0">
     <ul class="list-group list-group-flush">
         <?php
-        $tdEtiketD = ['hazirlaniyor'=>'Hazırlanıyor','yolda'=>'Yolda','teslim_edildi'=>'Teslim Edildi'];
-        $tdRenkD   = ['hazirlaniyor'=>'warning text-dark','yolda'=>'info text-dark','teslim_edildi'=>'success'];
+        $tdEtiketD = ['hazirlaniyor'=>'Hazırlanıyor','serviste'=>'Serviste','teslim_edildi'=>'Teslim Edildi'];
+        $tdRenkD   = ['hazirlaniyor'=>'warning text-dark','serviste'=>'info text-dark','teslim_edildi'=>'success'];
         foreach ($bugunTeslimatlar as $bt): ?>
         <li class="list-group-item d-flex justify-content-between align-items-center py-2">
             <div>
                 <a href="<?= BASE_URL ?>/modules/satislar/detay.php?id=<?= $bt['id'] ?>" class="text-decoration-none fw-semibold"><?= escH($bt['fatura_no']) ?></a>
-                <span class="text-muted small"> — <?= escH($bt['musteri_adi'] ?: 'Perakende') ?></span>
+                <span class="text-muted small"> — <?= escH($bt['musteri_adi'] ?: 'Perakende') ?><?= $bt['servis_firma'] ? ' • '.escH($bt['servis_firma']) : '' ?></span>
                 <?php if ($bt['montaj_tarihi'] === $bugun): ?><span class="badge bg-secondary ms-1">Montaj bugün</span><?php endif; ?>
             </div>
             <span class="badge bg-<?= $tdRenkD[$bt['teslimat_durum']] ?>"><?= $tdEtiketD[$bt['teslimat_durum']] ?></span>

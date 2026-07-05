@@ -12,14 +12,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST' && in_array($rol, ['yonetici','kasiyer
     $aksiyon = $_POST['aksiyon'] ?? '';
 
     if ($aksiyon === 'teslimat') {
-        $durum = in_array($_POST['teslimat_durum'] ?? '', ['yok','hazirlaniyor','yolda','teslim_edildi'], true)
+        $durum = in_array($_POST['teslimat_durum'] ?? '', ['yok','hazirlaniyor','serviste','teslim_edildi'], true)
                ? $_POST['teslimat_durum'] : 'yok';
         $ttarih = !empty($_POST['teslimat_tarihi']) ? gecerliTarih($_POST['teslimat_tarihi'], date('Y-m-d')) : null;
         $mtarih = !empty($_POST['montaj_tarihi'])   ? gecerliTarih($_POST['montaj_tarihi'], date('Y-m-d'))   : null;
-        $pdo->prepare("UPDATE satislar SET teslimat_tarihi=?, teslimat_adresi=?, teslimat_durum=?, montaj_tarihi=?, montaj_notu=? WHERE id=?")
+        $servisFirma   = mb_substr(trim($_POST['servis_firma'] ?? ''), 0, 150) ?: null;
+        $servisEleman  = mb_substr(trim($_POST['servis_eleman'] ?? ''), 0, 100) ?: null;
+        $servisTelefon = mb_substr(trim($_POST['servis_telefon'] ?? ''), 0, 20) ?: null;
+        $onayNotu      = mb_substr(trim($_POST['teslim_onay_notu'] ?? ''), 0, 255) ?: null;
+
+        // Mevcut zaman damgalarını çek — yalnızca durum ilk kez o aşamaya geçince damgalanır
+        $mevcut = $pdo->prepare("SELECT teslimat_durum, servis_alis_tarihi, teslim_onay_tarihi FROM satislar WHERE id=?");
+        $mevcut->execute([$id]); $mevcut = $mevcut->fetch();
+        $servisAlisTarihi = $mevcut['servis_alis_tarihi'];
+        if ($durum === 'serviste' && !$servisAlisTarihi) $servisAlisTarihi = date('Y-m-d H:i:s');
+        $teslimOnayTarihi = $mevcut['teslim_onay_tarihi'];
+        if ($durum === 'teslim_edildi' && !$teslimOnayTarihi) $teslimOnayTarihi = date('Y-m-d');
+
+        $pdo->prepare("UPDATE satislar SET teslimat_tarihi=?, teslimat_adresi=?, teslimat_durum=?, montaj_tarihi=?, montaj_notu=?,
+                       servis_firma=?, servis_eleman=?, servis_telefon=?, servis_alis_tarihi=?, teslim_onay_tarihi=?, teslim_onay_notu=? WHERE id=?")
             ->execute([$ttarih, mb_substr(trim($_POST['teslimat_adresi'] ?? ''), 0, 1000),
-                       $durum, $mtarih, mb_substr(trim($_POST['montaj_notu'] ?? ''), 0, 255) ?: null, $id]);
-        logla('teslimat_guncelle', 'satislar', $id, 'Durum: ' . $durum);
+                       $durum, $mtarih, mb_substr(trim($_POST['montaj_notu'] ?? ''), 0, 255) ?: null,
+                       $servisFirma, $servisEleman, $servisTelefon, $servisAlisTarihi, $teslimOnayTarihi, $onayNotu, $id]);
+        logla('teslimat_guncelle', 'satislar', $id, 'Durum: ' . $durum . ($servisFirma ? ' | Servis: ' . $servisFirma : ''));
         flash('basari', 'Teslimat bilgileri güncellendi.');
         header('Location: detay.php?id=' . $id); exit;
     }
@@ -456,8 +471,8 @@ $duzenleyebilir = in_array($rol, ['yonetici','kasiyer'], true);
             <div class="card-header bg-white fw-semibold py-2 d-flex justify-content-between align-items-center">
                 <span><i class="bi bi-truck text-info"></i> Teslimat / Montaj</span>
                 <?php
-                $tdEtiket = ['yok'=>'—','hazirlaniyor'=>'Hazırlanıyor','yolda'=>'Yolda','teslim_edildi'=>'Teslim Edildi'];
-                $tdRenk   = ['yok'=>'secondary','hazirlaniyor'=>'warning text-dark','yolda'=>'info text-dark','teslim_edildi'=>'success'];
+                $tdEtiket = ['yok'=>'—','hazirlaniyor'=>'Hazırlanıyor','serviste'=>'Serviste','teslim_edildi'=>'Teslim Edildi'];
+                $tdRenk   = ['yok'=>'secondary','hazirlaniyor'=>'warning text-dark','serviste'=>'info text-dark','teslim_edildi'=>'success'];
                 ?>
                 <span class="badge bg-<?= $tdRenk[$satis['teslimat_durum']] ?>"><?= $tdEtiket[$satis['teslimat_durum']] ?></span>
             </div>
@@ -471,6 +486,16 @@ $duzenleyebilir = in_array($rol, ['yonetici','kasiyer'], true);
                     <?php if ($satis['montaj_tarihi']): ?>
                     <tr><td class="text-muted small">Montaj</td><td class="fw-semibold"><?= tarih($satis['montaj_tarihi']) ?>
                         <?php if ($satis['montaj_notu']): ?><div class="small text-muted"><?= escH($satis['montaj_notu']) ?></div><?php endif; ?></td></tr>
+                    <?php endif; ?>
+                    <?php if ($satis['servis_firma']): ?>
+                    <tr><td class="text-muted small">Servis Firması</td><td class="fw-semibold"><?= escH($satis['servis_firma']) ?>
+                        <?php if ($satis['servis_eleman']): ?><div class="small text-muted"><?= escH($satis['servis_eleman']) ?><?= $satis['servis_telefon'] ? ' • '.escH($satis['servis_telefon']) : '' ?></div><?php endif; ?>
+                        <?php if ($satis['servis_alis_tarihi']): ?><div class="small text-muted">Alım: <?= tarihSaat($satis['servis_alis_tarihi']) ?></div><?php endif; ?>
+                    </td></tr>
+                    <?php endif; ?>
+                    <?php if ($satis['teslim_onay_tarihi']): ?>
+                    <tr><td class="text-muted small">Teslim Onayı</td><td class="fw-semibold text-success"><?= tarih($satis['teslim_onay_tarihi']) ?>
+                        <?php if ($satis['teslim_onay_notu']): ?><div class="small text-muted"><?= escH($satis['teslim_onay_notu']) ?></div><?php endif; ?></td></tr>
                     <?php endif; ?>
                 </table>
                 <?php else: ?>
@@ -498,6 +523,15 @@ $duzenleyebilir = in_array($rol, ['yonetici','kasiyer'], true);
                         <label class="form-label small mb-1">Montaj Tarihi</label>
                         <input type="date" name="montaj_tarihi" class="form-control form-control-sm mb-2" value="<?= escH($satis['montaj_tarihi'] ?? '') ?>">
                         <input type="text" name="montaj_notu" class="form-control form-control-sm mb-2" maxlength="255" placeholder="Montaj notu" value="<?= escH($satis['montaj_notu'] ?? '') ?>">
+                        <hr class="my-2">
+                        <label class="form-label small mb-1">Servis Firması <span class="text-muted">(ürünü mağazadan alıp müşteriye götüren firma)</span></label>
+                        <input type="text" name="servis_firma" class="form-control form-control-sm mb-2" maxlength="150" placeholder="Örn: Hızlı Nakliyat" value="<?= escH($satis['servis_firma'] ?? '') ?>">
+                        <div class="row g-2 mb-2">
+                            <div class="col-6"><input type="text" name="servis_eleman" class="form-control form-control-sm" maxlength="100" placeholder="Teslim alan eleman" value="<?= escH($satis['servis_eleman'] ?? '') ?>"></div>
+                            <div class="col-6"><input type="text" name="servis_telefon" class="form-control form-control-sm" maxlength="20" placeholder="Telefon" value="<?= escH($satis['servis_telefon'] ?? '') ?>"></div>
+                        </div>
+                        <label class="form-label small mb-1">Teslim Onay Notu</label>
+                        <input type="text" name="teslim_onay_notu" class="form-control form-control-sm mb-2" maxlength="255" placeholder="Örn: Müşteri teslim aldı" value="<?= escH($satis['teslim_onay_notu'] ?? '') ?>">
                         <button type="submit" class="btn btn-sm btn-info w-100">Kaydet</button>
                     </form>
                 </div>
