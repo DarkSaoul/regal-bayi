@@ -186,14 +186,19 @@ require_once __DIR__ . '/../../includes/header.php';
         <div class="d-flex align-items-center gap-2 flex-wrap">
             <span class="fw-semibold small text-nowrap"><i class="bi bi-search text-primary me-1"></i>Hızlı Stok Sorgulama</span>
             <div class="position-relative flex-grow-1" style="min-width:220px;max-width:420px">
-                <input type="text" id="stokSorguInput" class="form-control form-control-sm"
-                       placeholder="Ürün adı, kodu veya barkod ile ara..." autocomplete="off">
-                <span class="spinner-border spinner-border-sm text-primary position-absolute d-none"
-                      id="stokSorguSpinner" style="right:10px;top:6px"></span>
+                <div class="input-group input-group-sm">
+                    <input type="text" id="stokSorguInput" class="form-control"
+                           placeholder="Ürün adı, kodu veya barkod ile ara..." autocomplete="off">
+                    <span class="spinner-border spinner-border-sm text-primary position-absolute d-none"
+                          id="stokSorguSpinner" style="right:44px;top:8px;z-index:5"></span>
+                    <button type="button" class="btn btn-outline-success" onclick="kameraIleTara('dashboard_stok')" title="Kamera ile barkod tara">
+                        <i class="bi bi-camera"></i>
+                    </button>
+                </div>
                 <div id="stokSorguPopup" class="stok-sorgu-popup" style="display:none"></div>
             </div>
             <button type="button" class="btn btn-sm btn-primary" id="stokSorguBtn"><i class="bi bi-search"></i> Sorgula</button>
-            <span class="text-muted small">En az 2 karakter yazın veya barkod okutup Enter'a basın.</span>
+            <span class="text-muted small d-none d-md-inline">En az 2 karakter yazın, barkod okutun veya kamerayı kullanın.</span>
         </div>
     </div>
 </div>

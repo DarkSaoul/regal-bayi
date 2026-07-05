@@ -130,6 +130,12 @@ function _barkodIsle(kod, hedef) {
                 }
             }
         }
+    } else if (hedef === 'dashboard_stok') {
+        const inp = document.getElementById('stokSorguInput');
+        if (inp) {
+            inp.value = kod;
+            inp.dispatchEvent(new Event('input', { bubbles: true }));
+        }
     }
 }
 
