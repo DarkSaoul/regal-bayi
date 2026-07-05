@@ -105,6 +105,7 @@ function kameraIleTara(hedef) {
         const s = document.createElement('script');
         s.src = (window._baseUrl || '') + '/assets/js/barcode-scanner.js';
         s.onload = () => BarcodeScanner.start(kod => _barkodIsle(kod, hedef));
+        s.onerror = () => alert('Kamera modülü yüklenemedi. Sayfayı yenileyip tekrar deneyin.');
         document.head.appendChild(s);
     } else {
         BarcodeScanner.start(kod => _barkodIsle(kod, hedef));

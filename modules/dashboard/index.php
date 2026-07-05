@@ -738,6 +738,8 @@ if ($gorStok) {
 <?php endif; ?>
 
 <script>
+window._baseUrl = '<?= BASE_URL ?>'; // kameraIleTara() barcode-scanner.js'i doğru yoldan yüklesin diye gerekli
+
 // ── Satış Grafiği (yalnızca canvas varsa) ────────────────────
 // Chart.js footer'da yüklendiği için init DOMContentLoaded'a ertelenir
 const _satisGrafikEl = document.getElementById('satisGrafik');

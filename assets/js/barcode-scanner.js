@@ -79,14 +79,20 @@ const BarcodeScanner = (() => {
     async function start(callback) {
         initModal();
         onDetectedCb = callback;
+        // Modal önce açılır ki kütüphane yükleme başarısız olursa bile
+        // kullanıcı sessiz bir "hiçbir şey olmadı" durumuyla karşılaşmasın.
+        modalBs.show();
 
         // html5-qrcode kütüphanesi yüklü mü?
         if (typeof Html5Qrcode === 'undefined') {
             setStatus('Kütüphane yükleniyor...');
-            await loadScript('https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js');
+            try {
+                await loadScript('https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js');
+            } catch (e) {
+                setStatus('Kütüphane yüklenemedi. İnternet bağlantınızı kontrol edip tekrar deneyin, veya barkodu manuel girin.');
+                return;
+            }
         }
-
-        modalBs.show();
 
         try {
             const cameras = await Html5Qrcode.getCameras();
