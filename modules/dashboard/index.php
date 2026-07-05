@@ -911,7 +911,9 @@ document.getElementById('ceviriKod')?.addEventListener('change', ceviriHesapla);
 if (Object.keys(dovizKurlar).length) ceviriHesapla();
 
 // ── Hızlı Stok Sorgulama ──────────────────────────────────────
-(function () {
+// bootstrap.bundle.min.js footer'da (bu script'ten sonra) yüklendiği için
+// Modal init DOMContentLoaded'a ertelenir (Chart.js'teki aynı desen).
+document.addEventListener('DOMContentLoaded', function () {
     const input    = document.getElementById('stokSorguInput');
     const btn      = document.getElementById('stokSorguBtn');
     const spinner  = document.getElementById('stokSorguSpinner');
@@ -971,7 +973,7 @@ if (Object.keys(dovizKurlar).length) ceviriHesapla();
         if (input.value.trim().length < 2) return;
         debounceT = setTimeout(sorgula, 450);
     });
-})();
+});
 </script>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>
