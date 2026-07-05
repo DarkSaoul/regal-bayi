@@ -2,6 +2,7 @@
 define('BASE_URL', '/regal');
 require_once __DIR__ . '/../../includes/functions.php';
 auth();
+moduleKontrol('taksit_takvimi', 'Taksit Takvimi');
 $sayfa_basligi = 'Taksit Takvimi';
 $pdo = db();
 $rol = $_SESSION['rol'] ?? '';

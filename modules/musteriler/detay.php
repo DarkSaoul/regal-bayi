@@ -257,7 +257,7 @@ require_once __DIR__ . '/../../includes/header.php';
                     <?php endif; ?>
                     <?php if ($m['telefon2']): ?><tr><th class="text-muted">Telefon 2</th><td><a href="tel:<?= escH(telefonNormalize($m['telefon2'])) ?>"><?= escH($m['telefon2']) ?></a></td></tr><?php endif; ?>
                     <?php if ($m['email']): ?><tr><th class="text-muted">E-posta</th><td><a href="mailto:<?= escH($m['email']) ?>"><?= escH($m['email']) ?></a></td></tr><?php endif; ?>
-                    <?php if ($m['tc_no']): ?><tr><th class="text-muted">TC No</th><td><?= escH($m['tc_no']) ?></td></tr><?php endif; ?>
+                    <?php if ($m['tc_no']): ?><tr><th class="text-muted">TC No</th><td><?= escH(veriMaskele($m['tc_no'])) ?></td></tr><?php endif; ?>
                     <?php if ($m['vergi_no']): ?><tr><th class="text-muted">Vergi No</th><td><?= escH($m['vergi_no']) ?></td></tr><?php endif; ?>
                     <?php if ($m['sehir']): ?><tr><th class="text-muted">Şehir</th><td><?= escH($m['sehir']) ?></td></tr><?php endif; ?>
                     <?php if ($m['adres']): ?><tr><th class="text-muted">Adres</th><td><?= nl2br(escH($m['adres'])) ?></td></tr><?php endif; ?>

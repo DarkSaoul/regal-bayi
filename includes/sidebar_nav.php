@@ -37,12 +37,14 @@
             <i class="bi bi-archive"></i><span>Stok Takibi</span>
         </a>
     </li>
+    <?php if (moduleAktifMi('teshir')): ?>
     <li class="nav-item">
         <a class="nav-link <?= navAktif('tesir') ?>"
            href="<?= BASE_URL ?>/modules/stok/tesir.php">
             <i class="bi bi-shop-window"></i><span>Teşhir Yönetimi</span>
         </a>
     </li>
+    <?php endif; ?>
     <li class="nav-item">
         <a class="nav-link <?= navAktif('sayim') ?>"
            href="<?= BASE_URL ?>/modules/stok/sayim.php">
@@ -77,24 +79,28 @@
             <i class="bi bi-cash-stack"></i><span>Kasa & Finans</span>
         </a>
     </li>
+    <?php if (moduleAktifMi('taksit_takvimi')): ?>
     <li class="nav-item">
         <a class="nav-link <?= navAktif('taksit_takvimi') ?>"
            href="<?= BASE_URL ?>/modules/finans/taksit_takvimi.php">
             <i class="bi bi-calendar-week"></i><span>Taksit Takvimi</span>
         </a>
     </li>
+    <?php endif; ?>
     <li class="nav-item">
         <a class="nav-link <?= navAktif('kapanis') ?>"
            href="<?= BASE_URL ?>/modules/finans/kapanis.php">
             <i class="bi bi-door-closed"></i><span>Kasa Kapanışı</span>
         </a>
     </li>
+    <?php if (moduleAktifMi('vardiya')): ?>
     <li class="nav-item">
         <a class="nav-link <?= navAktif('vardiya') ?>"
            href="<?= BASE_URL ?>/modules/finans/vardiya.php">
             <i class="bi bi-arrow-left-right"></i><span>Vardiya</span>
         </a>
     </li>
+    <?php endif; ?>
 
     <li class="sidebar-section-title">Raporlar</li>
     <li class="nav-item">

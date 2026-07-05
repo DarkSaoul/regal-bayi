@@ -37,6 +37,13 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $_SESSION['rol']            = $kullanici['rol'];
             $_SESSION['son_aktivite']   = time();
 
+            // Tek oturum zorunluluğu için oturum token'ı üret ve DB'ye yaz (eskisi geçersiz olur)
+            $oturumToken = bin2hex(random_bytes(32));
+            $_SESSION['oturum_token'] = $oturumToken;
+            // Şifre geçerliliği hiç ayarlanmamışsa bu girişi baz tarih kabul et
+            db()->prepare("UPDATE kullanicilar SET son_giris=NOW(), aktif_oturum_token=?, sifre_degistirilme_tarihi=COALESCE(sifre_degistirilme_tarihi,NOW()) WHERE id=?")
+                ->execute([$oturumToken, $kullanici['id']]);
+
             logla('giris', 'auth', (int)$kullanici['id'], $kullanici['ad_soyad'] . ' giriş yaptı');
             if ($kullanici['rol'] === 'yonetici') {
                 // Haftalık oto-yedek: son 7 günde alınmamışsa otomatik al
@@ -52,7 +59,10 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
                 }
             }
 
-            header('Location: ' . BASE_URL . '/modules/dashboard/');
+            // Rol bazlı giriş sonrası yönlendirme (Ayarlar → Sistem Geneli)
+            $yonlendirmeAnahtari = ['yonetici' => 'giris_sonrasi_yonetici', 'kasiyer' => 'giris_sonrasi_kasiyer', 'depo' => 'giris_sonrasi_depo'][$kullanici['rol']] ?? '';
+            $ozelHedef = $yonlendirmeAnahtari ? ayar($yonlendirmeAnahtari, '') : '';
+            header('Location: ' . BASE_URL . ($ozelHedef ?: '/modules/dashboard/'));
             exit;
         }
 

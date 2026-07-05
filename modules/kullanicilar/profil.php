@@ -41,7 +41,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         } elseif ($hata = sifreDogrula($yeni)) {
             $hatalar[] = $hata;
         } else {
-            $pdo->prepare("UPDATE kullanicilar SET sifre=? WHERE id=?")
+            $pdo->prepare("UPDATE kullanicilar SET sifre=?, sifre_degistirilme_tarihi=NOW() WHERE id=?")
                 ->execute([password_hash($yeni, PASSWORD_DEFAULT), $uid]);
             logla('sifre_degistir', 'kullanicilar', $uid, 'Şifre değiştirildi');
             flash('basari', 'Şifreniz başarıyla değiştirildi.');

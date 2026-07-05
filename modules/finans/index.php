@@ -114,21 +114,21 @@ require_once __DIR__ . '/../../includes/header.php';
 
 <!-- Araç çubuğu -->
 <div class="d-flex flex-wrap gap-2 mb-3">
-    <a href="vardiya.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left-right"></i> Vardiya</a>
+    <?php if (moduleAktifMi('vardiya')): ?><a href="vardiya.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-left-right"></i> Vardiya</a><?php endif; ?>
     <?php if ($rol === 'yonetici'): ?>
     <a href="kategoriler.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-tags"></i> Kategoriler</a>
-    <a href="gider_sablonlari.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-repeat"></i> Tekrarlayan Giderler</a>
+    <?php if (moduleAktifMi('gider_sablonlari')): ?><a href="gider_sablonlari.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-arrow-repeat"></i> Tekrarlayan Giderler</a><?php endif; ?>
     <a href="gider_toplu.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-upload"></i> Toplu Gider</a>
     <a href="onay.php" class="btn btn-sm btn-outline-warning position-relative">
         <i class="bi bi-check2-square"></i> Onaylar
         <?php if ($onayBekleyen > 0): ?><span class="badge bg-danger ms-1"><?= $onayBekleyen ?></span><?php endif; ?>
     </a>
-    <a href="capraz_kontrol.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-check2-circle"></i> Tedarikçi Çapraz Kontrol</a>
-    <a href="kdv_raporu.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-receipt-cutoff"></i> KDV Özeti</a>
-    <a href="nakit_akis.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-graph-up"></i> Nakit Akış Tahmini</a>
+    <?php if (moduleAktifMi('capraz_kontrol')): ?><a href="capraz_kontrol.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-check2-circle"></i> Tedarikçi Çapraz Kontrol</a><?php endif; ?>
+    <?php if (moduleAktifMi('kdv_raporu')): ?><a href="kdv_raporu.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-receipt-cutoff"></i> KDV Özeti</a><?php endif; ?>
+    <?php if (moduleAktifMi('nakit_akis')): ?><a href="nakit_akis.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-graph-up"></i> Nakit Akış Tahmini</a><?php endif; ?>
     <?php endif; ?>
     <a href="kapanis.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-door-closed"></i> Kasa Kapanışı</a>
-    <a href="taksit_takvimi.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-calendar-week"></i> Taksit Takvimi</a>
+    <?php if (moduleAktifMi('taksit_takvimi')): ?><a href="taksit_takvimi.php" class="btn btn-sm btn-outline-secondary"><i class="bi bi-calendar-week"></i> Taksit Takvimi</a><?php endif; ?>
 </div>
 
 <?php if ($dusukBakiye): ?>

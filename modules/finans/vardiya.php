@@ -3,6 +3,7 @@
 define('BASE_URL', '/regal');
 require_once __DIR__ . '/../../includes/functions.php';
 auth(); yetki(['yonetici','kasiyer']);
+moduleKontrol('vardiya', 'Vardiya');
 $sayfa_basligi = 'Vardiya';
 $pdo = db();
 $rol = $_SESSION['rol'] ?? '';

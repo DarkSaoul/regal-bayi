@@ -32,8 +32,10 @@ function auth() {
         exit;
     }
 
-    // Session timeout (SESSION_TIMEOUT saniye hareketsizlik)
-    if (!empty($_SESSION['son_aktivite']) && (time() - $_SESSION['son_aktivite']) > SESSION_TIMEOUT) {
+    // Session timeout — Ayarlar → Sistem Geneli'nden yönetilir (dakika), .env'deki
+    // SESSION_TIMEOUT yalnızca ayar hiç tanımlanmamışsa devreye giren geriye dönük varsayılandır.
+    $zamanAsimiSaniye = (int)ayar('oturum_zaman_asimi_dakika', (string)(SESSION_TIMEOUT / 60)) * 60;
+    if (!empty($_SESSION['son_aktivite']) && (time() - $_SESSION['son_aktivite']) > $zamanAsimiSaniye) {
         session_unset();
         session_destroy();
         startSecureSession();
@@ -42,6 +44,34 @@ function auth() {
         exit;
     }
     $_SESSION['son_aktivite'] = time();
+
+    // Tek oturum zorunluluğu: başka bir cihazdan giriş yapılınca bu oturum geçersiz olur
+    if (ayar('tek_oturum_zorunlu','0') === '1' && !empty($_SESSION['oturum_token'])) {
+        $guncelToken = db()->prepare("SELECT aktif_oturum_token FROM kullanicilar WHERE id=?");
+        $guncelToken->execute([$_SESSION['kullanici_id']]);
+        $guncelToken = $guncelToken->fetchColumn();
+        if ($guncelToken && $guncelToken !== $_SESSION['oturum_token']) {
+            session_unset();
+            session_destroy();
+            startSecureSession();
+            $_SESSION['flash'] = ['tip' => 'uyari', 'mesaj' => 'Hesabınızla başka bir cihazdan giriş yapıldığı için bu oturum kapatıldı.'];
+            header('Location: ' . BASE_URL . '/modules/auth/login.php');
+            exit;
+        }
+    }
+
+    // Şifre geçerlilik süresi doldu mu — profil sayfası hariç her yerde zorla yönlendir
+    $gecerlilikGun = (int)ayar('sifre_gecerlilik_gun', '0');
+    if ($gecerlilikGun > 0 && !str_ends_with($_SERVER['SCRIPT_NAME'] ?? '', '/modules/kullanicilar/profil.php')) {
+        $degisimTarihi = db()->prepare("SELECT sifre_degistirilme_tarihi FROM kullanicilar WHERE id=?");
+        $degisimTarihi->execute([$_SESSION['kullanici_id']]);
+        $degisimTarihi = $degisimTarihi->fetchColumn();
+        if ($degisimTarihi && (time() - strtotime($degisimTarihi)) > $gecerlilikGun * 86400) {
+            flash('uyari', 'Şifrenizin süresi doldu, devam etmeden önce lütfen şifrenizi değiştirin.');
+            header('Location: ' . BASE_URL . '/modules/kullanicilar/profil.php');
+            exit;
+        }
+    }
 
     // Bakım modu: yönetici dışındaki roller bakım sayfasına yönlendirilir
     if (bakimModuAktifMi() && ($_SESSION['rol'] ?? '') !== 'yonetici') {
@@ -79,6 +109,10 @@ function csrfField(): string {
     return '<input type="hidden" name="csrf_token" value="' . csrfToken() . '">';
 }
 
+// Salt okunur modda yazma engellenmez sayfalar: ayarlar (kapatabilmek için),
+// kendi şifresini değiştirme (güvenlik nedeniyle), giriş/çıkış.
+const SALT_OKUNUR_ISTISNA = ['/modules/ayarlar/index.php', '/modules/kullanicilar/profil.php', '/modules/auth/login.php', '/modules/auth/logout.php'];
+
 function csrfVerify(): void {
     $token = $_POST['csrf_token'] ?? $_SERVER['HTTP_X_CSRF_TOKEN'] ?? '';
     if (!hash_equals(csrfToken(), $token)) {
@@ -94,12 +128,29 @@ function csrfVerify(): void {
         header('Location: ' . $hedef);
         exit;
     }
+
+    // Salt okunur mod: birkaç istisna dışında tüm yazma işlemleri engellenir
+    if (ayar('salt_okunur_mod','0') === '1') {
+        $sayfa = $_SERVER['SCRIPT_NAME'] ?? '';
+        $istisna = false;
+        foreach (SALT_OKUNUR_ISTISNA as $yol) { if (str_ends_with($sayfa, $yol)) { $istisna = true; break; } }
+        if (!$istisna) {
+            flash('uyari', 'Sistem şu anda salt okunur modda — veri değiştirme işlemleri geçici olarak kapalı.');
+            $hedef2   = BASE_URL . '/modules/dashboard/';
+            $referer2 = $_SERVER['HTTP_REFERER'] ?? '';
+            $host2 = explode(':', $_SERVER['HTTP_HOST'] ?? '')[0];
+            if ($referer2 && $host2 && (parse_url($referer2, PHP_URL_HOST) ?? '') === $host2) $hedef2 = $referer2;
+            header('Location: ' . $hedef2);
+            exit;
+        }
+    }
 }
 
 // ── Brute-force koruması (login için) ────────────────────────
 // Sayaç DB'de tutulur (aktivite_loglari); session/cookie atılarak aşılamaz.
-const BF_MAX     = 5;
-const BF_PENCERE = 900; // 15 dakika
+// Limit/pencere Ayarlar → Sistem Geneli'nden yönetilir (bf_max_deneme, bf_kilit_dakika).
+function bfPencereSaniye(): int { return max(60, (int)ayar('bf_kilit_dakika','15') * 60); }
+function bfMaxDeneme(): int { return max(1, (int)ayar('bf_max_deneme','5')); }
 
 // Aynı IP'den tüm hesaplara toplam deneme sınırı (password spraying önlemi)
 const BF_IP_MAX = 20;
@@ -107,20 +158,21 @@ const BF_IP_MAX = 20;
 function bruteForceKontrol(string $kullanici_adi): bool {
     try {
         $ip = $_SERVER['REMOTE_ADDR'] ?? '';
+        $pencere = bfPencereSaniye();
         // 1) Hesap+IP bazlı sayaç
         $stmt = db()->prepare(
             "SELECT COUNT(*) FROM aktivite_loglari
              WHERE aksiyon='giris_basarisiz' AND ip_adresi=? AND detay=?
-               AND created_at > DATE_SUB(NOW(), INTERVAL " . BF_PENCERE . " SECOND)"
+               AND created_at > DATE_SUB(NOW(), INTERVAL $pencere SECOND)"
         );
         $stmt->execute([$ip, $kullanici_adi]);
-        if ((int)$stmt->fetchColumn() >= BF_MAX) return false;
+        if ((int)$stmt->fetchColumn() >= bfMaxDeneme()) return false;
 
         // 2) IP bazlı toplam sayaç — farklı kullanıcı adlarıyla spraying'i sınırlar
         $ipStmt = db()->prepare(
             "SELECT COUNT(*) FROM aktivite_loglari
              WHERE aksiyon='giris_basarisiz' AND ip_adresi=?
-               AND created_at > DATE_SUB(NOW(), INTERVAL " . BF_PENCERE . " SECOND)"
+               AND created_at > DATE_SUB(NOW(), INTERVAL $pencere SECOND)"
         );
         $ipStmt->execute([$ip]);
         return (int)$ipStmt->fetchColumn() < BF_IP_MAX;
@@ -142,24 +194,26 @@ function bruteForceSifirla(string $kullanici_adi): void {
 
 function bruteForceKalanSure(string $kullanici_adi): int {
     try {
+        $pencere = bfPencereSaniye();
         // Penceredeki en eski başarısız deneme süresi dolunca blokaj kalkar
         $stmt = db()->prepare(
             "SELECT TIMESTAMPDIFF(SECOND, MIN(created_at), NOW()) FROM aktivite_loglari
              WHERE aksiyon='giris_basarisiz' AND ip_adresi=? AND detay=?
-               AND created_at > DATE_SUB(NOW(), INTERVAL " . BF_PENCERE . " SECOND)"
+               AND created_at > DATE_SUB(NOW(), INTERVAL $pencere SECOND)"
         );
         $stmt->execute([$_SERVER['REMOTE_ADDR'] ?? '', $kullanici_adi]);
         $gecen = (int)$stmt->fetchColumn();
-        return max(0, BF_PENCERE - $gecen);
+        return max(0, $pencere - $gecen);
     } catch (Exception $e) { return 0; }
 }
 
-// ── Şifre doğrulama politikası ───────────────────────────────
+// ── Şifre doğrulama politikası (Ayarlar → Sistem Geneli'nden yönetilir) ──
 function sifreDogrula(string $sifre): ?string {
-    if (strlen($sifre) < 8)                        return 'Şifre en az 8 karakter olmalıdır.';
-    if (!preg_match('/[A-ZÇĞİÖŞÜ]/u', $sifre))    return 'Şifre en az bir büyük harf içermelidir.';
-    if (!preg_match('/[a-zçğışöüı]/u', $sifre))   return 'Şifre en az bir küçük harf içermelidir.';
-    if (!preg_match('/[0-9]/', $sifre))             return 'Şifre en az bir rakam içermelidir.';
+    $minUzunluk = max(6, (int)ayar('sifre_min_uzunluk','8'));
+    if (strlen($sifre) < $minUzunluk) return "Şifre en az $minUzunluk karakter olmalıdır.";
+    if (ayar('sifre_buyuk_harf_zorunlu','1') === '1' && !preg_match('/[A-ZÇĞİÖŞÜ]/u', $sifre)) return 'Şifre en az bir büyük harf içermelidir.';
+    if (ayar('sifre_kucuk_harf_zorunlu','1') === '1' && !preg_match('/[a-zçğışöüı]/u', $sifre)) return 'Şifre en az bir küçük harf içermelidir.';
+    if (ayar('sifre_rakam_zorunlu','1') === '1' && !preg_match('/[0-9]/', $sifre)) return 'Şifre en az bir rakam içermelidir.';
     return null; // geçerli
 }
 
@@ -291,7 +345,8 @@ function sonAlisMaliyetleri(): array {
 // ── Döviz kurları (TCMB — 1 saatlik cache) ───────────────────
 function tcmbKurlari(): array {
     $cache = sys_get_temp_dir() . '/regal_tcmb.json';
-    if (file_exists($cache) && (time() - filemtime($cache)) < 3600) {
+    $cacheSaniye = max(60, (int)ayar('tcmb_kur_cache_dakika', '60') * 60);
+    if (file_exists($cache) && (time() - filemtime($cache)) < $cacheSaniye) {
         return json_decode(file_get_contents($cache), true) ?: [];
     }
     if (!function_exists('curl_init')) return [];
@@ -422,6 +477,7 @@ function kasaBakiyesi(string $hesap = 'kasa'): float {
 // ── Tekrarlayan gider şablonları ──────────────────────────────
 // Vadesi gelmiş (bu dönem için henüz oluşturulmamış) aktif şablonları döner.
 function giderSablonlariVadesiGelenler(): array {
+    if (ayar('otomasyon_aktif','1') !== '1') return [];
     $sablonlar = db()->query("SELECT gs.*, kk.ad AS kategori_adi FROM gider_sablonlari gs
         JOIN kasa_kategoriler kk ON gs.kategori_id=kk.id WHERE gs.aktif=1")->fetchAll();
     $bugun = new DateTime();
@@ -493,6 +549,34 @@ function bakimModuAktifMi(): bool {
     return ayar('bakim_modu', '0') === '1';
 }
 
+function saltOkunurMuAktif(): bool {
+    return ayar('salt_okunur_mod', '0') === '1';
+}
+
+// ── Modül açma/kapama ─────────────────────────────────────────
+// Yalnızca opsiyonel/ek modüller kapatılabilir; çekirdek satış/stok/müşteri/kasa her zaman aktiftir.
+function moduleAktifMi(string $modul): bool {
+    return ayar('modul_' . $modul . '_aktif', '1') === '1';
+}
+
+// Modül kapalıysa kullanıcıyı bilgilendirip dashboard'a yönlendirir.
+function moduleKontrol(string $modul, string $ad): void {
+    if (!moduleAktifMi($modul)) {
+        flash('uyari', "$ad modülü şu anda devre dışı bırakılmış (Ayarlar → Sistem Geneli).");
+        header('Location: ' . BASE_URL . '/modules/dashboard/');
+        exit;
+    }
+}
+
+// ── Veri maskeleme (demo/eğitim modu) ─────────────────────────
+function veriMaskele(?string $deger, int $sonKarakter = 2): string {
+    if (!$deger) return '';
+    if (ayar('veri_maskeleme_aktif','0') !== '1') return $deger;
+    $uzunluk = mb_strlen($deger);
+    if ($uzunluk <= $sonKarakter) return str_repeat('•', $uzunluk);
+    return str_repeat('•', $uzunluk - $sonKarakter) . mb_substr($deger, -$sonKarakter);
+}
+
 // ── Ayarları doğrula: bilinen mantıksal çelişki/bağımlılıkları tarar ──
 function ayarlariDogrula(): array {
     $sorunlar = [];
@@ -506,6 +590,17 @@ function ayarlariDogrula(): array {
     $gunler = array_filter(explode(',', ayar('calisma_gunleri','')));
     if (empty($gunler)) $sorunlar[] = 'Hiçbir çalışma günü seçilmemiş.';
     if (bakimModuAktifMi()) $sorunlar[] = 'Bakım modu şu anda AÇIK — yönetici dışındaki kullanıcılar sisteme giremiyor.';
+    if (saltOkunurMuAktif()) $sorunlar[] = 'Salt okunur mod şu anda AÇIK — hiç kimse veri değiştiremiyor.';
+    if ((int)ayar('sifre_min_uzunluk','8') < 6) $sorunlar[] = 'Şifre minimum uzunluğu çok düşük (6 karakterin altında).';
+    if ((int)ayar('bf_max_deneme','5') > 15) $sorunlar[] = 'Brute-force deneme limiti çok yüksek (15\'in üzerinde) — kaba kuvvet saldırılarına karşı zayıf koruma.';
+    if ((int)ayar('oturum_zaman_asimi_dakika','30') > 240) $sorunlar[] = 'Oturum zaman aşımı çok uzun (4 saatin üzerinde) — bilgisayar başında bırakılan oturumlar risk oluşturabilir.';
+    try {
+        $diskEsik = (float)ayar('disk_uyari_esik_gb','1');
+        $diskBos = @disk_free_space(__DIR__ . '/..');
+        if ($diskEsik > 0 && $diskBos !== false && ($diskBos / 1073741824) < $diskEsik) {
+            $sorunlar[] = 'Sunucu disk boş alanı kritik seviyede (' . number_format($diskBos / 1073741824, 2) . ' GB).';
+        }
+    } catch (Exception $e) {}
     return $sorunlar;
 }
 

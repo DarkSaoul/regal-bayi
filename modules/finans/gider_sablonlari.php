@@ -3,6 +3,7 @@
 define('BASE_URL', '/regal');
 require_once __DIR__ . '/../../includes/functions.php';
 auth(); yetki(['yonetici']);
+moduleKontrol('gider_sablonlari', 'Tekrarlayan Gider Şablonları');
 $sayfa_basligi = 'Tekrarlayan Giderler';
 $pdo = db();
 

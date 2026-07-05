@@ -112,7 +112,8 @@ function navAktif($sayfa) {
         <span class="d-inline d-sm-none"><?= escH(mb_substr(ayar('firma_adi','Regal'),0,8)) ?></span>
     </a>
 
-    <!-- Uyarı ikonları -->
+    <!-- Uyarı ikonları (Ayarlar → Sistem Geneli'nden tamamen kapatılabilir) -->
+    <?php if (ayar('bildirimler_aktif','1') === '1'): ?>
     <div class="d-flex align-items-center gap-1 me-1">
         <?php if ($uyari_stok > 0): ?>
         <a href="<?= BASE_URL ?>/modules/stok/dusuk.php"
@@ -130,7 +131,7 @@ function navAktif($sayfa) {
             <span class="d-none d-md-inline"><?= $bekleyen_odeme ?></span>
         </a>
         <?php endif; ?>
-        <?php if ($geckmis_taksit > 0): ?>
+        <?php if ($geckmis_taksit > 0 && moduleAktifMi('taksit_takvimi')): ?>
         <a href="<?= BASE_URL ?>/modules/finans/taksit_takvimi.php?filtre=gecmis"
            class="btn btn-sm btn-danger py-0 px-2 d-flex align-items-center gap-1"
            title="Gecikmiş Taksit">
@@ -147,6 +148,7 @@ function navAktif($sayfa) {
         </a>
         <?php endif; ?>
     </div>
+    <?php endif; ?>
 
     <!-- Kullanıcı dropdown -->
     <div class="dropdown">

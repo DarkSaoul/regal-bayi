@@ -228,9 +228,11 @@ require_once __DIR__ . '/../../includes/header.php';
 </div>
 
 <!-- ── Hava Durumu + Döviz Satırı ───────────────────────────── -->
+<?php $havaDurumuAktif = ayar('dashboard_hava_durumu_aktif','1') === '1'; ?>
 <div class="row g-3 mb-3">
 
-    <!-- Hava Durumu -->
+    <!-- Hava Durumu (Ayarlar → Sistem Geneli'nden kapatılabilir) -->
+    <?php if ($havaDurumuAktif): ?>
     <div class="col-lg-7">
         <div class="card shadow-sm h-100">
             <div class="card-body py-2 px-3">
@@ -251,9 +253,10 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
         </div>
     </div>
+    <?php endif; ?>
 
     <!-- Döviz Kurları -->
-    <div class="col-lg-5">
+    <div class="<?= $havaDurumuAktif ? 'col-lg-5' : 'col-lg-12' ?>">
         <div class="card shadow-sm h-100">
             <div class="card-body py-2 px-3">
                 <div class="d-flex align-items-center justify-content-between mb-2">
@@ -541,8 +544,9 @@ if ($gorStok) {
         $sayimGecikti = !$sonSayim || (time() - strtotime($sonSayim)) / 86400 > $periyot;
     } catch (Exception $e) {}
 }
+$bildirimlerAktif = ayar('bildirimler_aktif','1') === '1';
 ?>
-<?php if (($gorStok && ($dusukStok > 0 || $sayimGecikti)) || ($gorSatis && $gecmisKisat > 0) || ($gorKasa && ($dusukKasaBakiyesi || $kapanisHatirlat)) || ($isYon && $onayBekleyenGider > 0)): ?>
+<?php if ($bildirimlerAktif && (($gorStok && ($dusukStok > 0 || $sayimGecikti)) || ($gorSatis && $gecmisKisat > 0) || ($gorKasa && ($dusukKasaBakiyesi || $kapanisHatirlat)) || ($isYon && $onayBekleyenGider > 0))): ?>
 <div class="row g-3 mb-3">
     <?php if ($gorKasa && $dusukKasaBakiyesi): ?>
     <div class="col-md-6">
@@ -943,6 +947,7 @@ async function getSehirAdi(lat, lon) {
     } catch(e) { return 'Bilinmiyor'; }
 }
 
+<?php if ($havaDurumuAktif): ?>
 // Önce tarayıcı konumu, olmazsa IP konumu
 if (navigator.geolocation) {
     navigator.geolocation.getCurrentPosition(
@@ -967,6 +972,7 @@ if (navigator.geolocation) {
 } else {
     fetchWeather(39.9208, 32.8541, 'Ankara');
 }
+<?php endif; ?>
 
 // ── Döviz Çevirici ───────────────────────────────────────────
 const dovizKurlar = <?= $dovizJson ?>;

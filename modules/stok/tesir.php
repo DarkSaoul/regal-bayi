@@ -2,6 +2,7 @@
 define('BASE_URL', '/regal');
 require_once __DIR__ . '/../../includes/functions.php';
 auth(); yetki(['yonetici','depo','kasiyer']); // kasiyer salt-okunur (teşhirden satış yapıyor)
+moduleKontrol('teshir', 'Teşhir Yönetimi');
 $sayfa_basligi = 'Teşhir Yönetimi';
 $pdo = db();
 $duzenle = in_array($_SESSION['rol'] ?? '', ['yonetici','depo'], true);

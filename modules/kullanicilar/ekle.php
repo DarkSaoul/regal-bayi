@@ -17,6 +17,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         $hata = 'Kullanıcı adı ve ad soyad zorunludur.';
     } elseif ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $hata = 'Geçerli bir e-posta adresi girin.';
+    } elseif (!$email && ayar('kullanici_email_zorunlu','0') === '1') {
+        $hata = 'E-posta alanı zorunludur.';
     } else {
         try {
             $pdo->prepare("INSERT INTO kullanicilar (kullanici_adi,sifre,ad_soyad,email,rol) VALUES (?,?,?,?,?)")
@@ -39,7 +41,7 @@ require_once __DIR__ . '/../../includes/header.php';
         <?= csrfField() ?>
         <div class="mb-3"><label class="form-label fw-semibold">Kullanıcı Adı *</label><input type="text" name="kullanici_adi" class="form-control" required value="<?= escH($_POST['kullanici_adi']??'') ?>" maxlength="50"></div>
         <div class="mb-3"><label class="form-label fw-semibold">Ad Soyad *</label><input type="text" name="ad_soyad" class="form-control" required value="<?= escH($_POST['ad_soyad']??'') ?>" maxlength="100"></div>
-        <div class="mb-3"><label class="form-label fw-semibold">E-posta</label><input type="email" name="email" class="form-control" value="<?= escH($_POST['email']??'') ?>" maxlength="100"></div>
+        <div class="mb-3"><label class="form-label fw-semibold">E-posta<?= ayar('kullanici_email_zorunlu','0')==='1' ? ' *' : '' ?></label><input type="email" name="email" class="form-control" <?= ayar('kullanici_email_zorunlu','0')==='1' ? 'required' : '' ?> value="<?= escH($_POST['email']??'') ?>" maxlength="100"></div>
         <div class="mb-3">
             <label class="form-label fw-semibold">Şifre * <small class="text-muted">(min. 8 kar., büyük+küçük harf+rakam)</small></label>
             <input type="password" name="sifre" class="form-control" required minlength="8">

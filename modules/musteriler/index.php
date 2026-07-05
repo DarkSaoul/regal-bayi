@@ -255,7 +255,9 @@ require_once __DIR__ . '/../../includes/header.php';
                     <?php endif; ?>
                 </td>
                 <td class="text-nowrap">
-                    <?php if ($m['telefon']): ?>
+                    <?php if ($m['telefon'] && ayar('veri_maskeleme_aktif','0') === '1'): ?>
+                    <?= escH(veriMaskele($m['telefon'])) ?>
+                    <?php elseif ($m['telefon']): ?>
                     <a href="tel:<?= escH(telefonNormalize($m['telefon'])) ?>" class="text-decoration-none"><?= escH($m['telefon']) ?></a>
                     <?php if ($wa): ?><a href="<?= escH($wa) ?>" target="_blank" class="btn btn-sm btn-outline-success py-0 px-1 ms-1" title="WhatsApp"><i class="bi bi-whatsapp"></i></a><?php endif; ?>
                     <?php else: ?>-<?php endif; ?>

@@ -3,6 +3,7 @@
 define('BASE_URL', '/regal');
 require_once __DIR__ . '/../../includes/functions.php';
 auth(); yetki(['yonetici']);
+moduleKontrol('kdv_raporu', 'KDV Özeti');
 $sayfa_basligi = 'KDV Özeti';
 $pdo = db();
 

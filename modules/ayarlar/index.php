@@ -18,6 +18,14 @@ $varsayilanlar = [
     'bakim_mesaji'=>'Sistem bakımdadır, kısa süre sonra tekrar deneyin.','calisma_gunleri'=>'1,2,3,4,5,6',
     'mesai_baslangic'=>'09:00','mesai_bitis'=>'19:00','resmi_tatiller'=>'',
     'dashboard_kasiyer_finans'=>'1','dashboard_depo_ciro'=>'0',
+    'modul_teshir_aktif'=>'1','modul_vardiya_aktif'=>'1','modul_taksit_takvimi_aktif'=>'1',
+    'modul_gider_sablonlari_aktif'=>'1','modul_capraz_kontrol_aktif'=>'1','modul_kdv_raporu_aktif'=>'1','modul_nakit_akis_aktif'=>'1',
+    'giris_sonrasi_yonetici'=>'','giris_sonrasi_kasiyer'=>'','giris_sonrasi_depo'=>'',
+    'sifre_min_uzunluk'=>'8','sifre_buyuk_harf_zorunlu'=>'1','sifre_kucuk_harf_zorunlu'=>'1','sifre_rakam_zorunlu'=>'1','sifre_gecerlilik_gun'=>'0',
+    'bf_max_deneme'=>'5','bf_kilit_dakika'=>'15','oturum_zaman_asimi_dakika'=>'30','tek_oturum_zorunlu'=>'0',
+    'bildirimler_aktif'=>'1','otomasyon_aktif'=>'1','tcmb_kur_cache_dakika'=>'60','dashboard_hava_durumu_aktif'=>'1',
+    'kullanici_email_zorunlu'=>'0','pasif_hesap_uyari_gun'=>'90',
+    'veri_maskeleme_aktif'=>'0','salt_okunur_mod'=>'0','gecmis_saklama_gun'=>'365','disk_uyari_esik_gb'=>'1',
 ];
 
 // Hazır profil şablonları — yalnızca belirtilen anahtarları değiştirir
@@ -43,8 +51,18 @@ $izinli = [
     'taksit_gecikme_cezasi_oran','taksit_erken_odeme_indirim','taksit_takip_esik_gun',
     'zaman_dilimi','etiket_genislik_mm','etiket_yukseklik_mm','bakim_mesaji',
     'mesai_baslangic','mesai_bitis','resmi_tatiller',
+    'giris_sonrasi_yonetici','giris_sonrasi_kasiyer','giris_sonrasi_depo',
+    'sifre_min_uzunluk','sifre_gecerlilik_gun','bf_max_deneme','bf_kilit_dakika','oturum_zaman_asimi_dakika',
+    'tcmb_kur_cache_dakika','pasif_hesap_uyari_gun','gecmis_saklama_gun','disk_uyari_esik_gb',
 ];
-$checkboxlar = ['bakim_modu','dashboard_kasiyer_finans','dashboard_depo_ciro'];
+$checkboxlar = [
+    'bakim_modu','dashboard_kasiyer_finans','dashboard_depo_ciro',
+    'modul_teshir_aktif','modul_vardiya_aktif','modul_taksit_takvimi_aktif','modul_gider_sablonlari_aktif',
+    'modul_capraz_kontrol_aktif','modul_kdv_raporu_aktif','modul_nakit_akis_aktif',
+    'sifre_buyuk_harf_zorunlu','sifre_kucuk_harf_zorunlu','sifre_rakam_zorunlu',
+    'tek_oturum_zorunlu','bildirimler_aktif','otomasyon_aktif','dashboard_hava_durumu_aktif',
+    'kullanici_email_zorunlu','veri_maskeleme_aktif','salt_okunur_mod',
+];
 $gorselAlanlari = ['firma_logo' => 'logo_dosya', 'favicon' => 'favicon_dosya', 'login_arkaplan' => 'arkaplan_dosya', 'kase_imza' => 'kase_dosya'];
 
 $hata = '';
@@ -53,17 +71,22 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     $aksiyon = $_POST['aksiyon'] ?? 'kaydet';
 
     if ($aksiyon === 'kaydet') {
-        // Bakım modu KAPALIYKEN açılıyorsa (kasıtlı, riskli işlem) şifre teyidi iste
+        // Bakım modu veya Salt Okunur Mod KAPALIYKEN açılıyorsa (kasıtlı, riskli işlem) şifre teyidi iste
         $yeniBakim = isset($_POST['bakim_modu']) ? '1' : '0';
-        if ($yeniBakim === '1' && ayar('bakim_modu','0') !== '1') {
+        $yeniSaltOkunur = isset($_POST['salt_okunur_mod']) ? '1' : '0';
+        $bakimAciliyor = $yeniBakim === '1' && ayar('bakim_modu','0') !== '1';
+        $saltOkunurAciliyor = $yeniSaltOkunur === '1' && ayar('salt_okunur_mod','0') !== '1';
+        if ($bakimAciliyor || $saltOkunurAciliyor) {
+            $girilenSifre = $bakimAciliyor ? ($_POST['onay_sifre_bakim'] ?? '') : ($_POST['onay_sifre_salt'] ?? '');
             $sifreOK = false;
-            if (!empty($_POST['onay_sifre'])) {
+            if ($girilenSifre !== '') {
                 $kul = $pdo->prepare("SELECT sifre FROM kullanicilar WHERE id=?");
                 $kul->execute([$_SESSION['kullanici_id']]);
-                $sifreOK = password_verify($_POST['onay_sifre'], (string)$kul->fetchColumn());
+                $sifreOK = password_verify($girilenSifre, (string)$kul->fetchColumn());
             }
             if (!$sifreOK) {
-                flash('hata', 'Bakım modunu açmak için şifrenizi doğru girmelisiniz.');
+                $mesaj = $bakimAciliyor ? 'Bakım modunu açmak için' : 'Salt okunur modu açmak için';
+                flash('hata', "$mesaj şifrenizi doğru girmelisiniz.");
                 header('Location: index.php'); exit;
             }
         }
@@ -183,6 +206,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         flash('basari', $adet . ' eski log kaydı silindi (' . $gun . ' günden eski).');
         header('Location: index.php'); exit;
     }
+
+    if ($aksiyon === 'merkezi_temizlik') {
+        // Ayarlar → Sistem Geneli'ndeki "gecmis_saklama_gun" değerini tüm geçmiş tablolarına uygular
+        $gun = max(30, (int)ayar('gecmis_saklama_gun', '365'));
+        $toplam = 0;
+        foreach (['ayar_gecmisi', 'taksit_hatirlatmalari', 'taksit_erteleme_gecmisi'] as $tablo) {
+            $sil = $pdo->prepare("DELETE FROM $tablo WHERE created_at < DATE_SUB(NOW(), INTERVAL ? DAY)");
+            $sil->execute([$gun]);
+            $toplam += $sil->rowCount();
+        }
+        flash('basari', "$toplam eski geçmiş kaydı silindi ($gun günden eski — ayar geçmişi, taksit hatırlatma/erteleme).");
+        header('Location: index.php'); exit;
+    }
 }
 
 // ── Dışa aktar (JSON) ──────────────────────────────────────────
@@ -204,6 +240,18 @@ foreach ($ayarlar as $a) { $gruplar[$a['grup']][] = $a; }
 
 $importOnizleme = $_SESSION['ayar_import_onizleme'] ?? [];
 $gecmis = $pdo->query("SELECT g.*, k.ad_soyad FROM ayar_gecmisi g LEFT JOIN kullanicilar k ON g.kullanici_id=k.id ORDER BY g.id DESC LIMIT 40")->fetchAll();
+
+// Sistem Geneli Kontrol sekmesi için: pasif hesap uyarısı
+$pasifGun = (int)ayar('pasif_hesap_uyari_gun', '90');
+$pasifHesaplar = [];
+if ($pasifGun > 0) {
+    $ph = $pdo->prepare("SELECT ad_soyad, kullanici_adi, rol, son_giris FROM kullanicilar WHERE aktif=1 AND (son_giris IS NULL OR son_giris < DATE_SUB(NOW(), INTERVAL ? DAY)) ORDER BY son_giris IS NULL DESC, son_giris ASC");
+    $ph->execute([$pasifGun]);
+    $pasifHesaplar = $ph->fetchAll();
+}
+// Disk uyarısı
+$diskUyariGb = (float)ayar('disk_uyari_esik_gb', '1');
+$diskBosGb = @disk_free_space(__DIR__) !== false ? disk_free_space(__DIR__) / 1073741824 : null;
 
 require_once __DIR__ . '/../../includes/header.php';
 ?>
@@ -269,6 +317,7 @@ require_once __DIR__ . '/../../includes/header.php';
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-bildirim" type="button"><i class="bi bi-bell"></i> Bildirim Eşikleri</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-zaman" type="button"><i class="bi bi-clock-history"></i> Çalışma Zamanı</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-altyapi" type="button"><i class="bi bi-hdd-stack"></i> Sistem & Altyapı</button></li>
+        <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-genel-kontrol" type="button"><i class="bi bi-shield-lock"></i> Sistem Geneli Kontrol</button></li>
         <li class="nav-item"><button class="nav-link" data-bs-toggle="tab" data-bs-target="#tab-araclar" type="button"><i class="bi bi-tools"></i> Araçlar & Geçmiş</button></li>
     </ul>
 
@@ -756,7 +805,7 @@ require_once __DIR__ . '/../../includes/header.php';
                             <div class="form-text">Açıkken yönetici dışındaki kullanıcılar giriş yapamaz, bakım mesajı görür. <strong>Kapalıdan açığa geçirirken şifreniz istenir.</strong></div>
                             <div id="bakimSifreAlani" class="mt-2" style="display:none">
                                 <label class="form-label small fw-semibold">Şifrenizi Girin (onay için)</label>
-                                <input type="password" name="onay_sifre" class="form-control" style="max-width:250px" autocomplete="current-password">
+                                <input type="password" name="onay_sifre_bakim" class="form-control" style="max-width:250px" autocomplete="current-password">
                             </div>
                             <label class="form-label fw-semibold mt-3 ayar-satir" data-label="bakım mesajı">Bakım Mesajı</label>
                             <textarea name="bakim_mesaji" class="form-control ayar-input" rows="2" maxlength="255"><?= escH(ayar('bakim_mesaji','Sistem bakımdadır, kısa süre sonra tekrar deneyin.')) ?></textarea>
@@ -767,6 +816,215 @@ require_once __DIR__ . '/../../includes/header.php';
         </div>
 
         <!-- ── Araçlar & Geçmiş ── -->
+        <!-- ── Sistem Geneli Kontrol ── -->
+        <div class="tab-pane fade" id="tab-genel-kontrol">
+            <div class="row g-3">
+
+                <div class="col-12">
+                    <div class="card shadow-sm">
+                        <div class="card-header bg-white fw-semibold"><i class="bi bi-toggles text-primary"></i> Modül Açma/Kapama <span class="small text-muted fw-normal">(çekirdek satış/stok/müşteri/kasa her zaman aktiftir)</span></div>
+                        <div class="card-body">
+                            <div class="row g-2">
+                                <?php
+                                $modulTanim = [
+                                    'modul_teshir_aktif' => 'Teşhir Yönetimi', 'modul_vardiya_aktif' => 'Vardiya (Kasa Devri)',
+                                    'modul_taksit_takvimi_aktif' => 'Taksit Takvimi', 'modul_gider_sablonlari_aktif' => 'Tekrarlayan Gider Şablonları',
+                                    'modul_capraz_kontrol_aktif' => 'Tedarikçi Çapraz Kontrol', 'modul_kdv_raporu_aktif' => 'KDV Özeti',
+                                    'modul_nakit_akis_aktif' => 'Nakit Akış Tahmini',
+                                ];
+                                foreach ($modulTanim as $anahtar => $ad): ?>
+                                <div class="col-md-3 col-sm-6 ayar-satir" data-label="modül <?= strtolower($ad) ?>">
+                                    <div class="form-check form-switch">
+                                        <input class="form-check-input" type="checkbox" name="<?= $anahtar ?>" id="<?= $anahtar ?>" <?= ayar($anahtar,'1')==='1'?'checked':'' ?>>
+                                        <label class="form-check-label" for="<?= $anahtar ?>"><?= escH($ad) ?></label>
+                                    </div>
+                                </div>
+                                <?php endforeach; ?>
+                            </div>
+                            <div class="form-text">Kapatılan modüller sol menüden gizlenir ve sayfalarına doğrudan erişim engellenir.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header bg-white fw-semibold"><i class="bi bi-box-arrow-in-right text-primary"></i> Giriş Sonrası Yönlendirme</div>
+                        <div class="card-body">
+                            <?php
+                            $sayfaSecenekleri = [
+                                '' => 'Dashboard (varsayılan)', '/modules/satislar/yeni.php' => 'Yeni Satış',
+                                '/modules/stok/index.php' => 'Stok Takibi', '/modules/finans/index.php' => 'Kasa & Finans',
+                                '/modules/finans/taksit_takvimi.php' => 'Taksit Takvimi', '/modules/musteriler/index.php' => 'Müşteriler',
+                            ];
+                            foreach (['giris_sonrasi_yonetici'=>'Yönetici','giris_sonrasi_kasiyer'=>'Kasiyer','giris_sonrasi_depo'=>'Depo'] as $anahtar=>$rolAd): ?>
+                            <div class="mb-2 ayar-satir" data-label="giriş sonrası yönlendirme <?= strtolower($rolAd) ?>">
+                                <label class="form-label small fw-semibold mb-1"><?= $rolAd ?></label>
+                                <select name="<?= $anahtar ?>" class="form-select form-select-sm">
+                                    <?php foreach ($sayfaSecenekleri as $yol => $ad): ?>
+                                    <option value="<?= $yol ?>" <?= ayar($anahtar,'')===$yol?'selected':'' ?>><?= $ad ?></option>
+                                    <?php endforeach; ?>
+                                </select>
+                            </div>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header bg-white fw-semibold"><i class="bi bi-key text-primary"></i> Şifre Politikası</div>
+                        <div class="card-body">
+                            <div class="row g-2 mb-2">
+                                <div class="col-6 ayar-satir" data-label="şifre minimum uzunluk">
+                                    <label class="form-label small fw-semibold mb-1">Min. Uzunluk</label>
+                                    <input type="number" name="sifre_min_uzunluk" class="form-control form-control-sm" value="<?= (int)ayar('sifre_min_uzunluk','8') ?>" min="6" max="32">
+                                </div>
+                                <div class="col-6 ayar-satir" data-label="şifre geçerlilik süresi">
+                                    <label class="form-label small fw-semibold mb-1">Geçerlilik (gün, 0=süresiz)</label>
+                                    <input type="number" name="sifre_gecerlilik_gun" class="form-control form-control-sm" value="<?= (int)ayar('sifre_gecerlilik_gun','0') ?>" min="0" max="3650">
+                                </div>
+                            </div>
+                            <div class="form-check form-switch ayar-satir" data-label="şifre büyük harf zorunlu">
+                                <input class="form-check-input" type="checkbox" name="sifre_buyuk_harf_zorunlu" id="sbhz" <?= ayar('sifre_buyuk_harf_zorunlu','1')==='1'?'checked':'' ?>>
+                                <label class="form-check-label" for="sbhz">Büyük harf zorunlu</label>
+                            </div>
+                            <div class="form-check form-switch ayar-satir" data-label="şifre küçük harf zorunlu">
+                                <input class="form-check-input" type="checkbox" name="sifre_kucuk_harf_zorunlu" id="skhz" <?= ayar('sifre_kucuk_harf_zorunlu','1')==='1'?'checked':'' ?>>
+                                <label class="form-check-label" for="skhz">Küçük harf zorunlu</label>
+                            </div>
+                            <div class="form-check form-switch ayar-satir" data-label="şifre rakam zorunlu">
+                                <input class="form-check-input" type="checkbox" name="sifre_rakam_zorunlu" id="srz" <?= ayar('sifre_rakam_zorunlu','1')==='1'?'checked':'' ?>>
+                                <label class="form-check-label" for="srz">Rakam zorunlu</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header bg-white fw-semibold"><i class="bi bi-shield-exclamation text-primary"></i> Oturum & Giriş Güvenliği</div>
+                        <div class="card-body">
+                            <div class="row g-2">
+                                <div class="col-6 ayar-satir" data-label="brute force deneme limiti">
+                                    <label class="form-label small fw-semibold mb-1">Max. Başarısız Deneme</label>
+                                    <input type="number" name="bf_max_deneme" class="form-control form-control-sm" value="<?= (int)ayar('bf_max_deneme','5') ?>" min="3" max="20">
+                                </div>
+                                <div class="col-6 ayar-satir" data-label="kilit süresi dakika">
+                                    <label class="form-label small fw-semibold mb-1">Kilit Süresi (dk)</label>
+                                    <input type="number" name="bf_kilit_dakika" class="form-control form-control-sm" value="<?= (int)ayar('bf_kilit_dakika','15') ?>" min="1" max="1440">
+                                </div>
+                                <div class="col-6 ayar-satir" data-label="oturum zaman aşımı">
+                                    <label class="form-label small fw-semibold mb-1">Oturum Zaman Aşımı (dk)</label>
+                                    <input type="number" name="oturum_zaman_asimi_dakika" class="form-control form-control-sm" value="<?= (int)ayar('oturum_zaman_asimi_dakika','30') ?>" min="5" max="1440">
+                                </div>
+                            </div>
+                            <div class="form-check form-switch mt-2 ayar-satir" data-label="tek oturum zorunlu">
+                                <input class="form-check-input" type="checkbox" name="tek_oturum_zorunlu" id="tekOturum" <?= ayar('tek_oturum_zorunlu','0')==='1'?'checked':'' ?>>
+                                <label class="form-check-label" for="tekOturum">Kullanıcı aynı anda yalnızca tek cihazda oturum açabilsin</label>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header bg-white fw-semibold"><i class="bi bi-bell-slash text-primary"></i> Bildirim & Otomasyon Ana Anahtarları</div>
+                        <div class="card-body">
+                            <div class="form-check form-switch ayar-satir" data-label="bildirimler ana anahtar">
+                                <input class="form-check-input" type="checkbox" name="bildirimler_aktif" id="bildAktif" <?= ayar('bildirimler_aktif','1')==='1'?'checked':'' ?>>
+                                <label class="form-check-label" for="bildAktif">Tüm bildirim rozetleri/uyarıları gösterilsin</label>
+                            </div>
+                            <div class="form-check form-switch mt-2 ayar-satir" data-label="otomasyon ana anahtar">
+                                <input class="form-check-input" type="checkbox" name="otomasyon_aktif" id="otoAktif" <?= ayar('otomasyon_aktif','1')==='1'?'checked':'' ?>>
+                                <label class="form-check-label" for="otoAktif">Otomasyonlar çalışsın (tekrarlayan gider vade tespiti vb.)</label>
+                            </div>
+                            <hr>
+                            <div class="form-check form-switch ayar-satir" data-label="hava durumu widget">
+                                <input class="form-check-input" type="checkbox" name="dashboard_hava_durumu_aktif" id="havaAktif" <?= ayar('dashboard_hava_durumu_aktif','1')==='1'?'checked':'' ?>>
+                                <label class="form-check-label" for="havaAktif">Dashboard hava durumu widget'ı (harici API)</label>
+                            </div>
+                            <label class="form-label small fw-semibold mb-1 mt-2 ayar-satir" data-label="tcmb kur önbellek süresi">TCMB Kur Önbellek Süresi (dk)</label>
+                            <input type="number" name="tcmb_kur_cache_dakika" class="form-control form-control-sm" value="<?= (int)ayar('tcmb_kur_cache_dakika','60') ?>" min="5" max="1440" style="max-width:150px">
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header bg-white fw-semibold"><i class="bi bi-people text-primary"></i> Kullanıcı Politikaları</div>
+                        <div class="card-body">
+                            <div class="form-check form-switch ayar-satir" data-label="kullanıcı email zorunlu">
+                                <input class="form-check-input" type="checkbox" name="kullanici_email_zorunlu" id="emailZorunlu" <?= ayar('kullanici_email_zorunlu','0')==='1'?'checked':'' ?>>
+                                <label class="form-check-label" for="emailZorunlu">Yeni kullanıcıda e-posta zorunlu olsun</label>
+                            </div>
+                            <label class="form-label small fw-semibold mb-1 mt-3 ayar-satir" data-label="pasif hesap uyarısı">Pasif Hesap Uyarı Eşiği (gün, 0=kapalı)</label>
+                            <input type="number" name="pasif_hesap_uyari_gun" class="form-control form-control-sm" value="<?= (int)ayar('pasif_hesap_uyari_gun','90') ?>" min="0" max="3650" style="max-width:150px">
+                            <?php if ($pasifHesaplar): ?>
+                            <div class="alert alert-warning small mt-2 mb-0">
+                                <i class="bi bi-exclamation-triangle"></i> <?= count($pasifHesaplar) ?> hesap <?= $pasifGun ?>+ gündür giriş yapmamış:
+                                <ul class="mb-0 mt-1">
+                                    <?php foreach ($pasifHesaplar as $ph): ?>
+                                    <li><?= escH($ph['ad_soyad']) ?> (<?= escH($ph['kullanici_adi']) ?>) — <?= $ph['son_giris'] ? tarih($ph['son_giris']) : 'hiç giriş yapmadı' ?></li>
+                                    <?php endforeach; ?>
+                                </ul>
+                            </div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-md-6">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header bg-white fw-semibold"><i class="bi bi-eye-slash text-primary"></i> Veri Maskeleme & Saklama</div>
+                        <div class="card-body">
+                            <div class="form-check form-switch ayar-satir" data-label="veri maskeleme demo eğitim modu">
+                                <input class="form-check-input" type="checkbox" name="veri_maskeleme_aktif" id="maskeAktif" <?= ayar('veri_maskeleme_aktif','0')==='1'?'checked':'' ?>>
+                                <label class="form-check-label" for="maskeAktif">Demo/eğitim modu: müşteri telefon/TC gibi alanları listelerde maskele</label>
+                            </div>
+                            <label class="form-label small fw-semibold mb-1 mt-3 ayar-satir" data-label="geçmiş saklama süresi">Geçmiş Kayıt Saklama Süresi (gün)</label>
+                            <input type="number" name="gecmis_saklama_gun" class="form-control form-control-sm" value="<?= (int)ayar('gecmis_saklama_gun','365') ?>" min="30" max="3650" style="max-width:150px">
+                            <div class="form-text">Ayar geçmişi, taksit hatırlatma/erteleme geçmişi için geçerli — temizlemek için Araçlar sekmesindeki butonu kullanın.</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="card shadow-sm border-danger">
+                        <div class="card-header bg-white fw-semibold text-danger"><i class="bi bi-lock-fill"></i> Salt Okunur Mod</div>
+                        <div class="card-body">
+                            <div class="form-check form-switch ayar-satir" data-label="salt okunur mod">
+                                <input class="form-check-input" type="checkbox" name="salt_okunur_mod" id="saltSw" <?= ayar('salt_okunur_mod','0')==='1'?'checked':'' ?> onchange="saltOkunurUyari()">
+                                <label class="form-check-label fw-semibold" for="saltSw">Salt Okunur Modu Aç</label>
+                            </div>
+                            <div class="form-text">Açıkken sistemdeki hiçbir kullanıcı veri değiştiremez (yalnızca görüntüleme) — veri denetimi, devir teslim veya şüpheli durum incelemesi sırasında kullanışlıdır. Ayarlar sayfası ve kendi şifrenizi değiştirme her zaman erişilebilir kalır. <strong>Kapalıdan açığa geçirirken şifreniz istenir.</strong></div>
+                            <div id="saltSifreAlani" class="mt-2" style="display:none">
+                                <label class="form-label small fw-semibold">Şifrenizi Girin (onay için)</label>
+                                <input type="password" name="onay_sifre_salt" class="form-control" style="max-width:250px" autocomplete="current-password">
+                            </div>
+                            <hr>
+                            <label class="form-label small fw-semibold mb-1 ayar-satir" data-label="disk uyarı eşiği">Disk Boş Alan Uyarı Eşiği (GB, 0=kapalı)</label>
+                            <input type="number" name="disk_uyari_esik_gb" class="form-control form-control-sm" value="<?= (float)ayar('disk_uyari_esik_gb','1') ?>" min="0" step="0.5" style="max-width:150px">
+                            <?php if ($diskUyariGb > 0 && $diskBosGb !== null && $diskBosGb < $diskUyariGb): ?>
+                            <div class="alert alert-danger small mt-2 mb-0"><i class="bi bi-hdd-fill"></i> Disk boş alanı kritik seviyede: <?= number_format($diskBosGb, 2) ?> GB (eşik: <?= $diskUyariGb ?> GB)</div>
+                            <?php elseif ($diskBosGb !== null): ?>
+                            <div class="small text-muted mt-1">Şu an boş disk alanı: <?= number_format($diskBosGb, 2) ?> GB</div>
+                            <?php endif; ?>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="col-12">
+                    <div class="alert alert-light border small mb-0">
+                        <i class="bi bi-info-circle"></i> Daha fazla sistem geneli bilgi için:
+                        <a href="sistem_durumu.php">Sistem Durumu</a> ·
+                        <a href="veri_butunlugu.php">Veri Bütünlüğü Kontrolü</a> ·
+                        <a href="gunluk_ozet.php">Günlük Özet</a>
+                    </div>
+                </div>
+
+            </div>
+        </div>
+
         <div class="tab-pane fade" id="tab-araclar">
             <div class="row g-3 mb-3">
                 <div class="col-md-3">
@@ -852,6 +1110,20 @@ require_once __DIR__ . '/../../includes/header.php';
                 </div>
             </div>
 
+            <div class="card shadow-sm mb-3">
+                <div class="card-header bg-white fw-semibold"><i class="bi bi-trash3 text-primary"></i> Merkezi Geçmiş Temizliği</div>
+                <div class="card-body">
+                    <div class="small text-muted mb-2">
+                        Ayar geçmişi, taksit hatırlatma ve erteleme geçmişi tablolarını "Sistem Geneli Kontrol" sekmesindeki
+                        <strong>Geçmiş Kayıt Saklama Süresi</strong> (şu an <?= (int)ayar('gecmis_saklama_gun','365') ?> gün) değerine göre tek seferde temizler.
+                    </div>
+                    <form method="post" onsubmit="return confirm('Ayar geçmişi + taksit hatırlatma/erteleme geçmişindeki <?= (int)ayar('gecmis_saklama_gun','365') ?> günden eski kayıtlar kalıcı olarak silinecek. Emin misiniz?')">
+                        <?= csrfField() ?><input type="hidden" name="aksiyon" value="merkezi_temizlik">
+                        <button type="submit" class="btn btn-sm btn-outline-danger">Şimdi Temizle</button>
+                    </form>
+                </div>
+            </div>
+
             <div class="card shadow-sm">
                 <div class="card-header bg-white fw-semibold"><i class="bi bi-clock-history text-primary"></i> Değişiklik Geçmişi <span class="text-muted small fw-normal">(son 40 kayıt)</span></div>
                 <div class="card-body p-0">
@@ -916,6 +1188,12 @@ function bakimUyari() {
     document.getElementById('bakimSifreAlani').style.display = document.getElementById('bakimSw').checked ? '' : 'none';
 }
 bakimUyari();
+
+// ── Salt okunur mod şifre uyarısı ─────────────────────────────
+function saltOkunurUyari() {
+    document.getElementById('saltSifreAlani').style.display = document.getElementById('saltSw').checked ? '' : 'none';
+}
+saltOkunurUyari();
 
 // ── Gecikme cezası canlı örnek ────────────────────────────────
 function cezaOrnekGuncelle() {

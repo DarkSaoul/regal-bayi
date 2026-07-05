@@ -5,6 +5,7 @@
 define('BASE_URL', '/regal');
 require_once __DIR__ . '/../../includes/functions.php';
 auth(); yetki(['yonetici']);
+moduleKontrol('capraz_kontrol', 'Tedarikçi Çapraz Kontrol');
 $sayfa_basligi = 'Tedarikçi Ödemesi Çapraz Kontrolü';
 $pdo = db();
 
