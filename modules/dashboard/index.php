@@ -145,6 +145,11 @@ require_once __DIR__ . '/../../includes/header.php';
 .kur-kart .kur-alis { font-size:.8rem; color:#198754; }
 .kur-kart .kur-satis { font-size:.8rem; color:#dc3545; }
 .kur-kart .kur-deger { font-size:1.1rem; font-weight:700; }
+.stok-sorgu-popup { position:absolute; z-index:1050; top:100%; left:0; right:0; margin-top:4px; background:#fff; border:1px solid #dee2e6; border-radius:8px; max-height:360px; overflow-y:auto; box-shadow:0 8px 24px rgba(0,0,0,.15); }
+.stok-sorgu-popup .item { padding:8px 12px; border-bottom:1px solid #f0f0f0; text-decoration:none; color:inherit; display:flex; align-items:center; gap:10px; }
+.stok-sorgu-popup .item:last-child { border-bottom:none; }
+.stok-sorgu-popup .item:hover { background:#e8f0fe; }
+.stok-sorgu-popup .durum-msg { padding:16px; text-align:center; color:#6c757d; }
 </style>
 
 <!-- ── Sayfa Başlığı ─────────────────────────────────────────── -->
@@ -185,26 +190,10 @@ require_once __DIR__ . '/../../includes/header.php';
                        placeholder="Ürün adı, kodu veya barkod ile ara..." autocomplete="off">
                 <span class="spinner-border spinner-border-sm text-primary position-absolute d-none"
                       id="stokSorguSpinner" style="right:10px;top:6px"></span>
+                <div id="stokSorguPopup" class="stok-sorgu-popup" style="display:none"></div>
             </div>
             <button type="button" class="btn btn-sm btn-primary" id="stokSorguBtn"><i class="bi bi-search"></i> Sorgula</button>
             <span class="text-muted small">En az 2 karakter yazın veya barkod okutup Enter'a basın.</span>
-        </div>
-    </div>
-</div>
-
-<!-- Stok sorgu sonuç modalı -->
-<div class="modal fade" id="stokSorguModal" tabindex="-1">
-    <div class="modal-dialog modal-lg modal-dialog-scrollable">
-        <div class="modal-content">
-            <div class="modal-header py-2">
-                <h6 class="modal-title"><i class="bi bi-box-seam text-primary"></i> Stok Sorgu Sonuçları</h6>
-                <button type="button" class="btn-close" data-bs-dismiss="modal"></button>
-            </div>
-            <div class="modal-body p-0">
-                <div class="list-group list-group-flush" id="stokSorguListe">
-                    <div class="text-center text-muted py-4">Arama yapın</div>
-                </div>
-            </div>
         </div>
     </div>
 </div>
@@ -911,17 +900,17 @@ document.getElementById('ceviriKod')?.addEventListener('change', ceviriHesapla);
 if (Object.keys(dovizKurlar).length) ceviriHesapla();
 
 // ── Hızlı Stok Sorgulama ──────────────────────────────────────
-// bootstrap.bundle.min.js footer'da (bu script'ten sonra) yüklendiği için
-// Modal init DOMContentLoaded'a ertelenir (Chart.js'teki aynı desen).
-document.addEventListener('DOMContentLoaded', function () {
-    const input    = document.getElementById('stokSorguInput');
-    const btn      = document.getElementById('stokSorguBtn');
-    const spinner  = document.getElementById('stokSorguSpinner');
-    const liste    = document.getElementById('stokSorguListe');
+// Odağı çalmayan, input'un altında açılan anchored popup (musteriDropdown
+// deseniyle aynı) — Bootstrap Modal kullanılmıyor çünkü modal odağı kendine
+// aldığı için kullanıcı arama kutusuna yazmaya devam edemiyordu.
+(function () {
+    const input   = document.getElementById('stokSorguInput');
+    const btn     = document.getElementById('stokSorguBtn');
+    const spinner = document.getElementById('stokSorguSpinner');
+    const popup   = document.getElementById('stokSorguPopup');
     if (!input) return;
-    const modalEl  = document.getElementById('stokSorguModal');
-    const modal    = new bootstrap.Modal(modalEl);
-    let debounceT  = null;
+    let debounceT = null;
+    let istekNo   = 0; // yarış durumunu önlemek için: yalnızca son isteğin sonucu yazılır
 
     function durumRozet(d) {
         if (d === 'tukendi') return '<span class="badge bg-danger">Tükendi</span>';
@@ -929,25 +918,39 @@ document.addEventListener('DOMContentLoaded', function () {
         return '<span class="badge bg-success">Stokta</span>';
     }
 
+    function popupAc(icerikHtml) {
+        popup.innerHTML = icerikHtml;
+        popup.style.display = '';
+    }
+    function popupKapat() {
+        popup.style.display = 'none';
+    }
+
     function sorgula() {
         const q = input.value.trim();
-        if (q.length < 2) { input.classList.add('is-invalid'); setTimeout(() => input.classList.remove('is-invalid'), 900); return; }
+        if (q.length < 2) {
+            input.classList.add('is-invalid');
+            setTimeout(() => input.classList.remove('is-invalid'), 900);
+            popupKapat();
+            return;
+        }
+        const buIstek = ++istekNo;
         spinner.classList.remove('d-none');
-        modal.show();
-        liste.innerHTML = '<div class="text-center text-muted py-4"><span class="spinner-border spinner-border-sm me-1"></span> Aranıyor...</div>';
+        popupAc('<div class="durum-msg"><span class="spinner-border spinner-border-sm me-1"></span> Aranıyor...</div>');
         fetch('stok_sorgu.php?q=' + encodeURIComponent(q))
             .then(r => r.json())
             .then(j => {
+                if (buIstek !== istekNo) return; // input değişmiş, eski cevap yok sayılır
                 spinner.classList.add('d-none');
                 if (!j.ok || !j.sonuclar.length) {
-                    liste.innerHTML = '<div class="text-center text-muted py-4"><i class="bi bi-search fs-4 d-block mb-2 opacity-25"></i>"' + q.replace(/</g,'&lt;') + '" ile eşleşen ürün bulunamadı</div>';
+                    popupAc('<div class="durum-msg"><i class="bi bi-search fs-4 d-block mb-2 opacity-25"></i>"' + q.replace(/</g,'&lt;') + '" ile eşleşen ürün bulunamadı</div>');
                     return;
                 }
-                liste.innerHTML = j.sonuclar.map(u => `
-                    <a href="<?= BASE_URL ?>/modules/urunler/detay.php?id=${u.id}" class="list-group-item list-group-item-action d-flex align-items-center gap-3">
+                popupAc(j.sonuclar.map(u => `
+                    <a href="<?= BASE_URL ?>/modules/urunler/detay.php?id=${u.id}" class="item" target="_blank" rel="noopener">
                         ${u.resim
-                            ? `<img src="${u.resim}" class="rounded border flex-shrink-0" style="width:44px;height:44px;object-fit:cover">`
-                            : `<div class="rounded border bg-light d-flex align-items-center justify-content-center flex-shrink-0" style="width:44px;height:44px"><i class="bi bi-box-seam text-muted"></i></div>`}
+                            ? `<img src="${u.resim}" class="rounded border flex-shrink-0" style="width:40px;height:40px;object-fit:cover">`
+                            : `<div class="rounded border bg-light d-flex align-items-center justify-content-center flex-shrink-0" style="width:40px;height:40px"><i class="bi bi-box-seam text-muted"></i></div>`}
                         <div class="flex-grow-1">
                             <div class="fw-semibold">${u.ad.replace(/</g,'&lt;')}</div>
                             <div class="small text-muted">${u.kod}${u.marka ? ' • ' + u.marka : ''}${u.kategori ? ' • ' + u.kategori : ''}</div>
@@ -958,22 +961,28 @@ document.addEventListener('DOMContentLoaded', function () {
                             ${u.tesir > 0 ? '<div class="small text-warning"><i class="bi bi-shop-window"></i> ' + u.tesir + ' teşhir</div>' : ''}
                             <div class="small text-primary">${u.fiyat}</div>
                         </div>
-                    </a>`).join('');
+                    </a>`).join(''));
             })
             .catch(() => {
+                if (buIstek !== istekNo) return;
                 spinner.classList.add('d-none');
-                liste.innerHTML = '<div class="text-center text-danger py-4">Sorgu sırasında bağlantı hatası oluştu.</div>';
+                popupAc('<div class="durum-msg text-danger">Sorgu sırasında bağlantı hatası oluştu.</div>');
             });
     }
 
     btn.addEventListener('click', sorgula);
-    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sorgula(); } });
+    input.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); sorgula(); } if (e.key === 'Escape') popupKapat(); });
     input.addEventListener('input', () => {
         clearTimeout(debounceT);
-        if (input.value.trim().length < 2) return;
+        if (input.value.trim().length < 2) { popupKapat(); return; }
         debounceT = setTimeout(sorgula, 450);
     });
-});
+    input.addEventListener('focus', () => { if (popup.innerHTML.trim()) popup.style.display = ''; });
+    document.addEventListener('click', e => {
+        if (!e.target.closest('#stokSorguInput') && !e.target.closest('#stokSorguPopup') && !e.target.closest('#stokSorguBtn'))
+            popupKapat();
+    });
+})();
 </script>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>
