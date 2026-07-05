@@ -130,9 +130,15 @@ require_once __DIR__ . '/../../includes/header.php';
         </div>
         <div class="mb-3">
             <label class="form-label fw-semibold">Tahsilat Tutarı (₺) <span class="text-danger">*</span></label>
+            <?php
+            // ?tutar= ile önerilen bir tutar geldiyse (örn. erken ödeme hesaplayıcısından) onu kullan,
+            // kalan tutarı aşamaz.
+            $onerilenTutar = $satis && isset($_GET['tutar']) && is_numeric($_GET['tutar'])
+                ? min((float)$_GET['tutar'], (float)$satis['kalan_tutar']) : ($satis ? $satis['kalan_tutar'] : '');
+            ?>
             <input type="number" name="tutar" class="form-control" step="0.01" min="0.01" required
                    <?= $satis ? 'max="' . $satis['kalan_tutar'] . '"' : '' ?>
-                   value="<?= $satis ? $satis['kalan_tutar'] : '' ?>">
+                   value="<?= $onerilenTutar ?>">
             <?php if ($satis): ?>
             <div class="form-text">Maksimum: <?= para($satis['kalan_tutar']) ?></div>
             <?php endif; ?>

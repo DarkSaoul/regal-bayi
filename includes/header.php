@@ -7,7 +7,7 @@ $_nav_modul  = basename(dirname($_SERVER['PHP_SELF']));
 $_nav_ozel = [
     'stok'         => ['tesir.php' => 'tesir', 'sayim.php' => 'sayim', 'sayim_gecmis.php' => 'sayim'],
     'urunler'      => ['toplu_fiyat.php' => 'toplu_fiyat'],
-    'finans'       => ['taksit_takvimi.php' => 'taksit_takvimi', 'kapanis.php' => 'kapanis', 'vardiya.php' => 'vardiya'],
+    'finans'       => ['taksit_takvimi.php' => 'taksit_takvimi', 'taksit_performans.php' => 'taksit_takvimi', 'kapanis.php' => 'kapanis', 'vardiya.php' => 'vardiya'],
     'raporlar'     => ['kar_zarar.php' => 'kar_zarar'],
     'kullanicilar' => ['aktivite.php' => 'aktivite'],
     'satislar'     => ['teslimatlar.php' => 'teslimatlar', 'performans.php' => 'performans'],

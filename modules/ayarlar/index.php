@@ -15,7 +15,8 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
         'fatura_prefix','min_stok_uyari','tema_renk','tarih_formati','kayit_basi',
         'tesir_indirim','tesir_uyari_gun','sayim_periyot_gun',
         'kasiyer_max_indirim','bekleyen_satis_uyari_gun','fatura_alt_not',
-        'kasa_min_bakiye_uyari','gider_onay_limiti'
+        'kasa_min_bakiye_uyari','gider_onay_limiti',
+        'taksit_gecikme_cezasi_oran','taksit_erken_odeme_indirim','taksit_takip_esik_gun'
     ];
     foreach ($izinli as $key) {
         if (isset($_POST[$key])) {
@@ -383,6 +384,45 @@ require_once __DIR__ . '/../../includes/header.php';
                             <input type="number" name="gider_onay_limiti" class="form-control"
                                    value="<?= (float)ayar('gider_onay_limiti','0') ?>" min="0" step="0.01" style="max-width:180px">
                             <div class="form-text">Kasiyer bu tutarın üzerinde bir çıkış (gider) girerse kayıt yönetici onayı bekler ve onaylanana kadar kasa bakiyesine yansımaz (0 = sınırsız, onay gerekmez). Yönetici her zaman doğrudan onaylı girer.</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header bg-white fw-semibold">
+                            <i class="bi bi-calendar-x text-primary"></i> Taksit Gecikme Cezası
+                        </div>
+                        <div class="card-body">
+                            <label class="form-label fw-semibold">Aylık Gecikme Cezası Oranı (%)</label>
+                            <input type="number" name="taksit_gecikme_cezasi_oran" class="form-control"
+                                   value="<?= (float)ayar('taksit_gecikme_cezasi_oran','0') ?>" min="0" step="0.1" style="max-width:150px">
+                            <div class="form-text">Gecikmiş taksitlerde Taksit Takvimi'nde bilgi amaçlı gösterilir; otomatik tahsil edilmez (0 = kapalı).</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header bg-white fw-semibold">
+                            <i class="bi bi-piggy-bank text-primary"></i> Erken Ödeme İndirimi
+                        </div>
+                        <div class="card-body">
+                            <label class="form-label fw-semibold">İndirim Oranı (%)</label>
+                            <input type="number" name="taksit_erken_odeme_indirim" class="form-control"
+                                   value="<?= (float)ayar('taksit_erken_odeme_indirim','0') ?>" min="0" max="100" step="0.1" style="max-width:150px">
+                            <div class="form-text">Kalan taksitler peşin kapatılırsa Taksit Performans Raporu'ndaki hesaplayıcıda uygulanır (0 = kapalı).</div>
+                        </div>
+                    </div>
+                </div>
+                <div class="col-md-4">
+                    <div class="card shadow-sm h-100">
+                        <div class="card-header bg-white fw-semibold">
+                            <i class="bi bi-flag text-primary"></i> Takip Eşiği
+                        </div>
+                        <div class="card-body">
+                            <label class="form-label fw-semibold">Gecikme Gün Eşiği</label>
+                            <input type="number" name="taksit_takip_esik_gun" class="form-control"
+                                   value="<?= (int)ayar('taksit_takip_esik_gun','30') ?>" min="1" max="365" style="max-width:150px">
+                            <div class="form-text">Bu kadar gün geciken taksitler Taksit Takvimi'nde "Takip Önerilir" rozetiyle işaretlenir.</div>
                         </div>
                     </div>
                 </div>
