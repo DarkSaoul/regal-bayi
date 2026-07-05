@@ -267,6 +267,15 @@ function fiyatGecmisiKaydet(int $urun_id, $eskiAlis, $yeniAlis, $eskiSatis, $yen
     } catch (Exception $e) {}
 }
 
+// ── Son gerçek alış maliyetleri ──────────────────────────────
+// Her ürünün son maliyetli stok girişindeki birim maliyeti: [urun_id => maliyet]
+function sonAlisMaliyetleri(): array {
+    return db()->query("SELECT h.urun_id, h.birim_maliyet FROM stok_hareketleri h
+        JOIN (SELECT urun_id, MAX(id) AS mid FROM stok_hareketleri
+              WHERE hareket_tipi='giris' AND birim_maliyet IS NOT NULL GROUP BY urun_id) x ON x.mid=h.id")
+        ->fetchAll(PDO::FETCH_KEY_PAIR);
+}
+
 // ── Döviz kurları (TCMB — 1 saatlik cache) ───────────────────
 function tcmbKurlari(): array {
     $cache = sys_get_temp_dir() . '/regal_tcmb.json';

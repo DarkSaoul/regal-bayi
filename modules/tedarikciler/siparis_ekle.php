@@ -9,6 +9,14 @@ $tedarikci_id = (int)($_GET['tedarikci_id'] ?? 0);
 $tedarikciler = $pdo->query("SELECT id, ad FROM tedarikciler ORDER BY ad")->fetchAll();
 $urunler      = $pdo->query("SELECT id, kod, ad, alis_fiyati FROM urunler WHERE aktif=1 ORDER BY ad")->fetchAll();
 
+// Ön doldurma (örn. düşük stok sayfasından): ?on_urunler=id:miktar,id:miktar
+$onYukle = [];
+foreach (array_filter(explode(',', $_GET['on_urunler'] ?? '')) as $parca) {
+    [$oid, $omik] = array_pad(explode(':', $parca), 2, 1);
+    $oid = (int)$oid; $omik = max(1, (int)$omik);
+    if ($oid) $onYukle[] = ['id' => $oid, 'miktar' => $omik];
+}
+
 $hata = '';
 if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrfVerify();
@@ -178,7 +186,23 @@ function hesapla() {
     document.getElementById('toplamGoster').textContent = fmt(toplam);
 }
 document.addEventListener('input', e => { if (e.target.closest('.kalem-row')) hesapla(); });
-kalemEkle();
+
+// Düşük stok sayfasından gelen ön doldurma
+const ON_YUKLE = <?= json_encode($onYukle) ?>;
+if (ON_YUKLE.length) {
+    ON_YUKLE.forEach(o => {
+        kalemEkle();
+        const satirlar = document.querySelectorAll('.kalem-row');
+        const satir = satirlar[satirlar.length - 1];
+        const sel = satir.querySelector('.k-urun');
+        sel.value = o.id;
+        sel.dispatchEvent(new Event('change'));
+        satir.querySelector('.k-miktar').value = o.miktar;
+    });
+    hesapla();
+} else {
+    kalemEkle();
+}
 </script>
 
 <?php require_once __DIR__ . '/../../includes/footer.php'; ?>

@@ -153,13 +153,6 @@ function ozetle(array $satirlar): array {
     return $o;
 }
 
-function sonMaliyetler(PDO $pdo): array {
-    return $pdo->query("SELECT h.urun_id, h.birim_maliyet FROM stok_hareketleri h
-        JOIN (SELECT urun_id, MAX(id) AS mid FROM stok_hareketleri
-              WHERE hareket_tipi='giris' AND birim_maliyet IS NOT NULL GROUP BY urun_id) x ON x.mid=h.id")
-        ->fetchAll(PDO::FETCH_KEY_PAIR);
-}
-
 function kapsamMetni(array $p, PDO $pdo): string {
     if ($p['ids']) return count($p['ids']) . ' seçili ürün';
     $parca = [];
@@ -224,7 +217,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
             $p = parametreOku($pdo);
             $urunler = kapsamUrunleri($pdo, $p);
             if (!$urunler) throw new Exception('Seçilen kapsamda ürün bulunamadı — filtreleri kontrol edin.');
-            $maliyetler = $p['yontem'] === 'maliyet' ? sonMaliyetler($pdo) : [];
+            $maliyetler = $p['yontem'] === 'maliyet' ? sonAlisMaliyetleri() : [];
             $satirlar = fiyatlariHesapla($urunler, $p, $maliyetler);
             $ozet = ozetle($satirlar);
 
