@@ -15,13 +15,33 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
     csrfVerify();
     $d = $_POST;
     $email = trim($d['email'] ?? '');
+    $telefon  = telefonNormalize($d['telefon'] ?? '');
+    $telefon2 = telefonNormalize($d['telefon2'] ?? '');
+    $tc = trim($d['tc_no'] ?? '');
+    $vkn = trim($d['vergi_no'] ?? '');
     if (!trim($d['ad'] ?? '')) {
         $hata = 'Ad alanı zorunludur.';
     } elseif ($email && !filter_var($email, FILTER_VALIDATE_EMAIL)) {
         $hata = 'Geçerli bir e-posta adresi girin.';
+    } elseif ($tc !== '' && !tcKimlikGecerli($tc)) {
+        $hata = 'TC Kimlik No geçersiz (algoritma doğrulaması başarısız).';
+    } elseif ($vkn !== '' && !vergiNoGecerli($vkn)) {
+        $hata = 'Vergi No geçersiz (10 haneli olmalı, algoritma doğrulaması başarısız).';
     } else {
+        // Mükerrer telefon (kendisi hariç)
+        if ($telefon !== '') {
+            $mk = $pdo->prepare("SELECT id, ad, soyad, firma_adi FROM musteriler WHERE (telefon=? OR telefon2=?) AND id!=? LIMIT 1");
+            $mk->execute([$telefon, $telefon, $id]);
+            if ($mevcut = $mk->fetch()) {
+                $hata = 'Bu telefon başka bir müşteride kayıtlı: <a href="detay.php?id=' . (int)$mevcut['id'] . '">'
+                    . escH(trim(($mevcut['firma_adi'] ?: '') . ' ' . $mevcut['ad'] . ' ' . ($mevcut['soyad'] ?? ''))) . '</a>'
+                    . ' — çift kayıtsa listeden "Birleştir" kullanın.';
+            }
+        }
+    }
+    if (!$hata) {
         $pdo->prepare("UPDATE musteriler SET tip=?,ad=?,soyad=?,firma_adi=?,tc_no=?,vergi_no=?,telefon=?,telefon2=?,email=?,adres=?,sehir=?,notlar=? WHERE id=?")
-            ->execute([$d['tip']??'bireysel', trim($d['ad']), $d['soyad']??'', $d['firma_adi']??'', $d['tc_no']??'', $d['vergi_no']??'', $d['telefon']??'', $d['telefon2']??'', $email, $d['adres']??'', $d['sehir']??'', $d['notlar']??'', $id]);
+            ->execute([$d['tip']??'bireysel', trim($d['ad']), $d['soyad']??'', $d['firma_adi']??'', $tc, $vkn, $telefon, $telefon2, $email, $d['adres']??'', $d['sehir']??'', $d['notlar']??'', $id]);
         flash('basari', 'Müşteri güncellendi.');
         header('Location: detay.php?id=' . $id); exit;
     }
@@ -33,7 +53,7 @@ require_once __DIR__ . '/../../includes/header.php';
     <h4><i class="bi bi-pencil text-primary"></i> Müşteri Düzenle</h4>
 </div>
 <?php if ($hata): ?>
-<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> <?= escH($hata) ?></div>
+<div class="alert alert-danger"><i class="bi bi-exclamation-triangle"></i> <?= $hata /* içeriği escH ile kaçırılmış, link içerebilir */ ?></div>
 <?php endif; ?>
 <div class="card shadow-sm">
     <div class="card-body">

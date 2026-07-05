@@ -330,6 +330,42 @@ function urunResmiYukle(array $dosya, ?string $eskiResim = null): ?string {
     return $ad;
 }
 
+// ── Müşteri yardımcıları ─────────────────────────────────────
+// Telefonu tek biçime indirger: 05XXXXXXXXX (+90/90/0 önekleri temizlenir)
+function telefonNormalize(string $t): string {
+    $t = preg_replace('/\D+/', '', $t);
+    if (str_starts_with($t, '90') && strlen($t) === 12) $t = substr($t, 2);
+    if (strlen($t) === 10 && $t[0] === '5') $t = '0' . $t;
+    return $t;
+}
+
+// wa.me linki (mesaj opsiyonel); geçersiz telefonda null
+function whatsappLink(string $telefon, string $mesaj = ''): ?string {
+    $t = telefonNormalize($telefon);
+    if (!preg_match('/^05\d{9}$/', $t)) return null;
+    return 'https://wa.me/9' . $t . ($mesaj !== '' ? '?text=' . rawurlencode($mesaj) : '');
+}
+
+// TC Kimlik No algoritma doğrulaması
+function tcKimlikGecerli(string $tc): bool {
+    if (!preg_match('/^[1-9]\d{10}$/', $tc)) return false;
+    $d = array_map('intval', str_split($tc));
+    $t10 = ((($d[0] + $d[2] + $d[4] + $d[6] + $d[8]) * 7) - ($d[1] + $d[3] + $d[5] + $d[7])) % 10;
+    if ($t10 < 0) $t10 += 10;
+    return $t10 === $d[9] && (array_sum(array_slice($d, 0, 10)) % 10) === $d[10];
+}
+
+// Vergi Kimlik No algoritma doğrulaması (10 hane)
+function vergiNoGecerli(string $v): bool {
+    if (!preg_match('/^\d{10}$/', $v)) return false;
+    $toplam = 0;
+    for ($i = 0; $i < 9; $i++) {
+        $d = ((int)$v[$i] + (9 - $i)) % 10;
+        $toplam += ($d === 9) ? 9 : ($d * (2 ** (9 - $i))) % 9;
+    }
+    return ((10 - $toplam % 10) % 10) === (int)$v[9];
+}
+
 // ── Müşteri borcu ─────────────────────────────────────────────
 // toplam_borc türetilmiş veridir; artır/azalt yerine her değişiklikte
 // açık satışların kalanından yeniden hesaplanır (senkron kaybı önlenir).

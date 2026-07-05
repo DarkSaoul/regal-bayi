@@ -194,8 +194,11 @@ if ($sayimAcilis && (time() - $sayimAcilis) < 1800): ?>
 
         <!-- Müşteri -->
         <div class="card shadow-sm mb-3">
-            <div class="card-header bg-white fw-semibold py-2">
-                <i class="bi bi-person text-primary"></i> Müşteri
+            <div class="card-header bg-white fw-semibold py-2 d-flex justify-content-between align-items-center">
+                <span><i class="bi bi-person text-primary"></i> Müşteri</span>
+                <a href="<?= BASE_URL ?>/modules/musteriler/ekle.php?geri=<?= urlencode('/regal/modules/satislar/yeni.php?d=1') ?>"
+                   class="btn btn-sm btn-outline-primary py-0" title="Listede yoksa hızlıca ekleyin — kaydedince bu ekrana dönersiniz">
+                    <i class="bi bi-person-plus"></i> Yeni</a>
             </div>
             <div class="card-body pb-2">
                 <input type="hidden" name="musteri_id" id="musteriId" value="<?= $musteri_id ?>">

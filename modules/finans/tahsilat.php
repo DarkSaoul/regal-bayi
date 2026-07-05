@@ -7,7 +7,7 @@ $pdo = db();
 
 $satis_id = (int)($_GET['satis_id'] ?? 0);
 $satis = null;
-$musteri_id = 0;
+$musteri_id = (int)($_GET['musteri_id'] ?? 0); // müşteri detayından "Tahsilat Al" kısayolu
 if ($satis_id) {
     $stmt = $pdo->prepare("SELECT s.*, CONCAT(m.ad,' ',COALESCE(m.soyad,'')) AS musteri_adi FROM satislar s LEFT JOIN musteriler m ON s.musteri_id=m.id WHERE s.id=?");
     $stmt->execute([$satis_id]);
