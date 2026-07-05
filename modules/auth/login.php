@@ -68,11 +68,19 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1">
-<title>Giriş | Regal Bayi</title>
+<title>Giriş | <?= escH(ayar('firma_adi','Regal Bayi')) ?></title>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
+<?php if (ayar('favicon')): ?><link rel="icon" href="<?= BASE_URL ?>/uploads/marka/<?= escH(ayar('favicon')) ?>"><?php endif; ?>
 <style>
-body { background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); min-height: 100vh; display: flex; align-items: center; }
+body {
+    <?php if (ayar('login_arkaplan')): ?>
+    background: url('<?= BASE_URL ?>/uploads/marka/<?= escH(ayar('login_arkaplan')) ?>') center/cover no-repeat fixed;
+    <?php else: ?>
+    background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%);
+    <?php endif; ?>
+    min-height: 100vh; display: flex; align-items: center;
+}
 .login-card { border-radius: 16px; box-shadow: 0 20px 60px rgba(0,0,0,.25); }
 .logo-area { background: #0d6efd; border-radius: 16px 16px 0 0; }
 </style>
@@ -83,8 +91,12 @@ body { background: linear-gradient(135deg, #0d6efd 0%, #0a58ca 100%); min-height
 <div class="col-md-4 col-sm-8">
     <div class="login-card bg-white overflow-hidden">
         <div class="logo-area text-center text-white p-4">
+            <?php if (ayar('firma_logo')): ?>
+            <img src="<?= BASE_URL ?>/uploads/marka/<?= escH(ayar('firma_logo')) ?>" style="max-height:60px;max-width:80%;object-fit:contain">
+            <?php else: ?>
             <i class="bi bi-shop-window" style="font-size:3rem"></i>
-            <h4 class="mt-2 mb-0 fw-bold">Regal Bayi</h4>
+            <?php endif; ?>
+            <h4 class="mt-2 mb-0 fw-bold"><?= escH(ayar('firma_adi','Regal Bayi')) ?></h4>
             <small>Yönetim Sistemi</small>
         </div>
         <div class="p-4">

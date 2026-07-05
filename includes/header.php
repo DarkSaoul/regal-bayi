@@ -57,6 +57,7 @@ function navAktif($sayfa) {
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <title><?= escH($sayfa_basligi ?? '') ?><?= $sayfa_basligi ? ' | ' : '' ?><?= escH(ayar('site_basligi','Regal Bayi Yönetim')) ?></title>
+<?php if (ayar('favicon')): ?><link rel="icon" href="<?= BASE_URL ?>/uploads/marka/<?= escH(ayar('favicon')) ?>"><?php endif; ?>
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
 <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.0/font/bootstrap-icons.css">
 <link rel="stylesheet" href="<?= BASE_URL ?>/assets/css/style.css">
@@ -67,6 +68,7 @@ function navAktif($sayfa) {
     --bs-primary-rgb:    <?= $_t['rgb'] ?>;
     --theme-hex:         <?= $_t['hex'] ?>;
     --theme-rgb:         <?= $_t['rgb'] ?>;
+    --bs-secondary:      <?= escH(ayar('tema_ikincil_renk','#6c757d')) ?>;
   }
   .bg-purple { background-color: #6f42c1 !important; }
   .text-purple { color: #6f42c1 !important; }
@@ -77,6 +79,20 @@ function navAktif($sayfa) {
                   --bs-btn-hover-bg: color-mix(in srgb, var(--theme-hex) 85%, black); }
   .toplam-kutu  { background: linear-gradient(135deg, var(--theme-hex), color-mix(in srgb, var(--theme-hex) 80%, black)) !important; }
   a { color: var(--bs-primary); }
+  <?php
+  $yaziTipleri = ['arial' => "Arial, sans-serif", 'georgia' => "Georgia, 'Times New Roman', serif", 'mono' => "'Courier New', monospace"];
+  $secilenFont = $yaziTipleri[ayar('yazi_tipi','sistem')] ?? null;
+  if ($secilenFont): ?>
+  body, .form-control, .form-select, .btn { font-family: <?= $secilenFont ?>; }
+  <?php endif; ?>
+  <?php if (ayar('sidebar_duzen','sabit') === 'daraltilabilir'): ?>
+  @media (min-width: 769px) {
+    :root { --sidebar-width: 60px; }
+    .sidebar-nav .nav-link span, .sidebar-section-title { display: none; }
+    .sidebar-nav .nav-link i { margin-right: 0; }
+    .sidebar-nav .nav-link { justify-content: center; padding: 12px; }
+  }
+  <?php endif; ?>
 </style>
 </head>
 <body>

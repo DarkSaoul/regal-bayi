@@ -16,6 +16,9 @@ $urunler = $stmt->fetchAll();
 if (!$urunler) { flash('hata', 'Ürün bulunamadı.'); header('Location: index.php'); exit; }
 
 $firma = ayar('firma_adi', 'Regal Bayi');
+$etiketGenislik = max(20, min(150, (int)ayar('etiket_genislik_mm', '60')));
+$etiketYukseklik = max(15, min(100, (int)ayar('etiket_yukseklik_mm', '35')));
+$svgGenislik = max(10, $etiketGenislik - 4);
 ?>
 <!DOCTYPE html>
 <html lang="tr">
@@ -33,14 +36,14 @@ $firma = ayar('firma_adi', 'Regal Bayi');
     .arac-cubugu input { width:60px; padding:4px; border-radius:4px; border:0; }
     .sayfa { display:flex; flex-wrap:wrap; gap:4mm; padding:8mm; background:#fff; max-width:210mm; margin:10px auto; }
     .etiket {
-        width:60mm; height:35mm; border:1px dashed #bbb; border-radius:2mm;
+        width:<?= $etiketGenislik ?>mm; height:<?= $etiketYukseklik ?>mm; border:1px dashed #bbb; border-radius:2mm;
         padding:2mm; display:flex; flex-direction:column; align-items:center; justify-content:space-between;
         overflow:hidden; page-break-inside:avoid; background:#fff;
     }
     .etiket .firma { font-size:8pt; font-weight:bold; letter-spacing:0.5px; text-transform:uppercase; }
     .etiket .adx { font-size:8pt; text-align:center; line-height:1.15; max-height:8mm; overflow:hidden; }
     .etiket .fiyat { font-size:13pt; font-weight:bold; }
-    .etiket svg { max-width:56mm; height:11mm; }
+    .etiket svg { max-width:<?= $svgGenislik ?>mm; height:11mm; }
     .etiket .koddx { font-size:7pt; color:#333; }
     @media print {
         .arac-cubugu { display:none; }

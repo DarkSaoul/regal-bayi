@@ -49,6 +49,9 @@ td { padding:2px 0; vertical-align:top; }
     <a href="detay.php?id=<?= $id ?>">← Satış Detayı</a>
 </div>
 <div class="fis">
+    <?php if (ayar('firma_logo')): ?>
+    <div class="center"><img src="<?= BASE_URL ?>/uploads/marka/<?= escH(ayar('firma_logo')) ?>" style="max-height:40px;max-width:100%;object-fit:contain"></div>
+    <?php endif; ?>
     <div class="center bold" style="font-size:14px"><?= escH(ayar('firma_adi','Regal Bayi')) ?></div>
     <?php if (ayar('firma_telefon')): ?><div class="center"><?= escH(ayar('firma_telefon')) ?></div><?php endif; ?>
     <?php if (ayar('firma_adres')): ?><div class="center" style="font-size:10px"><?= escH(ayar('firma_adres')) ?></div><?php endif; ?>

@@ -58,6 +58,9 @@ td { padding:5px 8px; border-bottom:1px solid #eee; font-size:11px; }
         <a href="detay.php?id=<?= $id ?>">← Satış Detayı</a>
     </div>
 
+    <?php if (ayar('firma_logo')): ?>
+    <div style="text-align:center;margin-bottom:8px"><img src="<?= BASE_URL ?>/uploads/marka/<?= escH(ayar('firma_logo')) ?>" style="max-height:55px;max-width:160px;object-fit:contain"></div>
+    <?php endif; ?>
     <h2><?= escH(ayar('firma_adi','Regal Bayi')) ?></h2>
     <div class="alt-baslik">TAKSİTLİ SATIŞ SÖZLEŞMESİ — Fatura No: <?= escH($satis['fatura_no']) ?> — <?= tarih($satis['tarih']) ?></div>
 
@@ -119,6 +122,9 @@ td { padding:5px 8px; border-bottom:1px solid #eee; font-size:11px; }
 
     <div class="imza-alani">
         <div class="imza-kutu">
+            <?php if (ayar('kase_imza')): ?>
+            <img src="<?= BASE_URL ?>/uploads/marka/<?= escH(ayar('kase_imza')) ?>" style="max-height:60px;max-width:140px;object-fit:contain">
+            <?php endif; ?>
             <div class="imza-cizgi">SATICI<br><?= escH(ayar('firma_adi','Regal Bayi')) ?></div>
         </div>
         <div class="imza-kutu">

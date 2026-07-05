@@ -51,12 +51,17 @@ $enCokSatan = $pdo->query("
 ")->fetchAll();
 
 // ── Rol bazlı görünürlük ─────────────────────────────────────
+// Kasiyer için finans görünürlüğü ve depo için parasal envanter gösterimi
+// Ayarlar → Sistem & Altyapı'dan yönetilebilir (varsayılan: kasiyer görür, depo görmez).
 $rol          = $_SESSION['rol'] ?? '';
 $isYon        = $rol === 'yonetici';
-$gorSatis     = in_array($rol, ['yonetici','kasiyer'], true); // ciro, tahsilat, taksit, müşteri
-$gorKasa      = in_array($rol, ['yonetici','kasiyer'], true); // kasa bakiyesi
+$kasiyerFinansGorsun = ayar('dashboard_kasiyer_finans','1') === '1';
+$depoCiroGorsun      = ayar('dashboard_depo_ciro','0') === '1';
+$gorSatis     = $isYon || ($rol === 'kasiyer' && $kasiyerFinansGorsun); // ciro, tahsilat, taksit, müşteri
+$gorKasa      = $isYon || ($rol === 'kasiyer' && $kasiyerFinansGorsun); // kasa bakiyesi
 $gorStok      = in_array($rol, ['yonetici','depo'], true);    // stok/envanter
 $gorFinans    = $isYon;                                        // kâr, tedarikçi borç, envanter değeri
+$gorDepoCiro  = $rol === 'depo' && $depoCiroGorsun;              // depo için parasal envanter değeri
 
 // ── Bu ay brüt kâr + marj (kar_zarar mantığı) ────────────────
 $k = $pdo->prepare("
@@ -491,6 +496,21 @@ require_once __DIR__ . '/../../includes/header.php';
             </div>
         </div>
     </div>
+    <?php if ($gorDepoCiro): ?>
+    <!-- Ayarlardan açılırsa depo da envanter parasal değerini görür -->
+    <div class="col-xl-3 col-md-6">
+        <div class="card stat-card h-100 shadow-sm">
+            <div class="card-body d-flex align-items-center gap-3">
+                <div class="stat-icon bg-info bg-opacity-10 text-info"><i class="bi bi-cash-stack"></i></div>
+                <div>
+                    <div class="text-muted small">Envanter Değeri (satış)</div>
+                    <div class="fw-bold fs-5"><?= para($env['satis_deger']) ?></div>
+                    <div class="small text-muted">Maliyet: <?= para($env['maliyet_deger']) ?></div>
+                </div>
+            </div>
+        </div>
+    </div>
+    <?php endif; ?>
     <?php endif; ?>
 
     <?php if ($gorSatis): ?>

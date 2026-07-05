@@ -38,6 +38,10 @@ install/installed.lock
 uploads/urunler/*
 !uploads/urunler/.gitkeep
 
+# Yüklenen marka görselleri (logo/favicon/arkaplan/kaşe)
+uploads/marka/*
+!uploads/marka/.gitkeep
+
 # Yüklenen gider belgeleri (fiş/fatura)
 uploads/kasa/*
 !uploads/kasa/.gitkeep

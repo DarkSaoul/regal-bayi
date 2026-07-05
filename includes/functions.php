@@ -42,6 +42,18 @@ function auth() {
         exit;
     }
     $_SESSION['son_aktivite'] = time();
+
+    // Bakım modu: yönetici dışındaki roller bakım sayfasına yönlendirilir
+    if (bakimModuAktifMi() && ($_SESSION['rol'] ?? '') !== 'yonetici') {
+        http_response_code(503);
+        echo '<!DOCTYPE html><html lang="tr"><head><meta charset="UTF-8"><title>Bakımdayız</title>'
+            . '<style>body{font-family:Arial,sans-serif;background:#f8f9fa;display:flex;align-items:center;justify-content:center;height:100vh;margin:0}'
+            . '.kutu{text-align:center;padding:40px;background:#fff;border-radius:12px;box-shadow:0 2px 12px rgba(0,0,0,.08);max-width:420px}'
+            . 'h1{font-size:1.4rem;color:#212529}p{color:#6c757d}</style></head><body>'
+            . '<div class="kutu"><h1>🛠 Sistem Bakımda</h1><p>' . htmlspecialchars(ayar('bakim_mesaji','Kısa süre sonra tekrar deneyin.')) . '</p></div>'
+            . '</body></html>';
+        exit;
+    }
 }
 
 // ── Rol bazlı yetki ───────────────────────────────────────────
@@ -446,11 +458,59 @@ function ayar(string $anahtar, string $varsayilan = ''): string {
     return $GLOBALS['__ayar_cache'][$anahtar] ?? $varsayilan;
 }
 
-function ayarKaydet(string $anahtar, string $deger): void {
+// Değer gerçekten değiştiyse ayar_gecmisi'ne kaydeder (gürültü olmasın diye).
+function ayarKaydet(string $anahtar, string $deger, ?string $not = null): void {
+    $eski = ayar($anahtar, '');
     db()->prepare("INSERT INTO ayarlar (anahtar, deger) VALUES (?,?) ON DUPLICATE KEY UPDATE deger=?, updated_at=NOW()")
         ->execute([$anahtar, $deger, $deger]);
     if (isset($GLOBALS['__ayar_cache'])) $GLOBALS['__ayar_cache'][$anahtar] = $deger;
+    if ($eski !== $deger) {
+        try {
+            db()->prepare("INSERT INTO ayar_gecmisi (anahtar,eski_deger,yeni_deger,not_metni,kullanici_id) VALUES (?,?,?,?,?)")
+                ->execute([$anahtar, $eski, $deger, $not, $_SESSION['kullanici_id'] ?? null]);
+        } catch (Exception $e) {}
+    }
 }
+
+// ── Marka görseli yükleme (logo/favicon/arkaplan/kaşe) ───────
+function markaGorseliYukle(array $dosya, ?string $eskiDosya = null): ?string {
+    if (($dosya['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return null;
+    if ($dosya['error'] !== UPLOAD_ERR_OK) throw new Exception('Görsel yüklenemedi (hata kodu: ' . $dosya['error'] . ').');
+    if ($dosya['size'] > 2 * 1024 * 1024) throw new Exception('Görsel en fazla 2 MB olabilir.');
+    $bilgi = @getimagesize($dosya['tmp_name']);
+    $izinli = [IMAGETYPE_JPEG => 'jpg', IMAGETYPE_PNG => 'png', IMAGETYPE_WEBP => 'webp', IMAGETYPE_GIF => 'gif'];
+    if (!$bilgi || !isset($izinli[$bilgi[2]])) throw new Exception('Yalnızca JPG, PNG, WEBP veya GIF yüklenebilir.');
+    $dir = __DIR__ . '/../uploads/marka/';
+    if (!is_dir($dir)) @mkdir($dir, 0777, true);
+    $ad = 'marka_' . date('YmdHis') . '_' . bin2hex(random_bytes(4)) . '.' . $izinli[$bilgi[2]];
+    if (!move_uploaded_file($dosya['tmp_name'], $dir . $ad)) throw new Exception('Görsel kaydedilemedi (dizin yazma izni).');
+    if ($eskiDosya && is_file($dir . basename($eskiDosya))) @unlink($dir . basename($eskiDosya));
+    return $ad;
+}
+
+// ── Bakım modu ────────────────────────────────────────────────
+function bakimModuAktifMi(): bool {
+    return ayar('bakim_modu', '0') === '1';
+}
+
+// ── Ayarları doğrula: bilinen mantıksal çelişki/bağımlılıkları tarar ──
+function ayarlariDogrula(): array {
+    $sorunlar = [];
+    if ((float)ayar('kasiyer_max_indirim','0') > 100) $sorunlar[] = 'Kasiyer maksimum indirim %100\'den büyük olamaz.';
+    if ((float)ayar('taksit_erken_odeme_indirim','0') > 100) $sorunlar[] = 'Erken ödeme indirimi %100\'den büyük olamaz.';
+    if (ayar('gider_onay_limiti','0') === '0') $sorunlar[] = 'Gider onay limiti kapalı (0) — kasiyerler sınırsız gider girebilir, onay bekleyen kayıt oluşmaz.';
+    if (ayar('kasa_min_bakiye_uyari','0') === '0') $sorunlar[] = 'Düşük kasa bakiyesi uyarısı kapalı (0) — kasa boşalsa da dashboard uyarı vermez.';
+    $mesaiB = ayar('mesai_baslangic','09:00'); $mesaiS = ayar('mesai_bitis','19:00');
+    if ($mesaiB >= $mesaiS) $sorunlar[] = 'Mesai başlangıç saati bitiş saatinden önce olmalı.';
+    if (!in_array(ayar('zaman_dilimi','Europe/Istanbul'), timezone_identifiers_list(), true)) $sorunlar[] = 'Geçersiz zaman dilimi tanımlı.';
+    $gunler = array_filter(explode(',', ayar('calisma_gunleri','')));
+    if (empty($gunler)) $sorunlar[] = 'Hiçbir çalışma günü seçilmemiş.';
+    if (bakimModuAktifMi()) $sorunlar[] = 'Bakım modu şu anda AÇIK — yönetici dışındaki kullanıcılar sisteme giremiyor.';
+    return $sorunlar;
+}
+
+// Uygulama genelinde zaman dilimini ayarlardan uygula (her sayfa yüklemesinde bir kez)
+try { date_default_timezone_set(ayar('zaman_dilimi', 'Europe/Istanbul')); } catch (Exception $e) {}
 
 // ── Aktivite logu ────────────────────────────────────────────
 function logla(string $aksiyon, string $modul = '', int $hedef_id = 0, string $detay = ''): void {

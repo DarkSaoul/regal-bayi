@@ -58,6 +58,7 @@ tr:nth-child(even) td { background: #f9f9f9; }
     .no-print { display: none !important; }
     body { font-size: 11px; }
     .container { padding: 10px; }
+    @page { size: <?= ayar('fatura_kagit_boyutu','A4') === '80mm' ? '80mm auto' : ayar('fatura_kagit_boyutu','A4') ?>; }
 }
 </style>
 </head>
@@ -69,13 +70,18 @@ tr:nth-child(even) td { background: #f9f9f9; }
     </div>
 
     <div class="header">
-        <div>
+        <div style="display:flex;align-items:center;gap:10px">
+            <?php if (ayar('firma_logo')): ?>
+            <img src="<?= BASE_URL ?>/uploads/marka/<?= escH(ayar('firma_logo')) ?>" style="max-height:50px;max-width:110px;object-fit:contain">
+            <?php endif; ?>
+            <div>
             <div class="firma-adi"><?= escH(ayar('firma_adi','Regal Bayi')) ?></div>
             <?php if (ayar('firma_slogan')): ?><div style="color:#555;font-size:11px"><?= escH(ayar('firma_slogan')) ?></div><?php endif; ?>
             <?php if (ayar('firma_telefon')): ?><div>Tel: <?= escH(ayar('firma_telefon')) ?></div><?php endif; ?>
             <?php if (ayar('firma_email')): ?><div><?= escH(ayar('firma_email')) ?></div><?php endif; ?>
             <?php if (ayar('firma_adres')): ?><div><?= escH(ayar('firma_adres')) ?></div><?php endif; ?>
             <?php if (ayar('firma_vergi_no')): ?><div>V.No: <?= escH(ayar('firma_vergi_no')) ?> / <?= escH(ayar('firma_vergi_daire')) ?></div><?php endif; ?>
+            </div>
         </div>
         <div>
             <div class="fatura-no">SATIŞ FATURASI<br><?= escH($satis['fatura_no']) ?></div>
@@ -197,6 +203,12 @@ tr:nth-child(even) td { background: #f9f9f9; }
     </table>
     <?php endif; ?>
 
+    <?php if (ayar('kase_imza')): ?>
+    <div style="text-align:right;margin-top:16px">
+        <img src="<?= BASE_URL ?>/uploads/marka/<?= escH(ayar('kase_imza')) ?>" style="max-height:70px;max-width:160px;object-fit:contain">
+    </div>
+    <?php endif; ?>
+
     <div style="display:flex;justify-content:space-between;align-items:center;margin-top:16px">
         <div style="font-size:10px;color:#555;max-width:600px"><?= nl2br(escH(ayar('fatura_alt_not', ''))) ?></div>
         <div id="qrKutu"></div>
@@ -206,6 +218,7 @@ tr:nth-child(even) td { background: #f9f9f9; }
         <?= escH(ayar('firma_adi','Regal Bayi')) ?> &bull;
         <?php if(ayar('firma_telefon')): ?><?= escH(ayar('firma_telefon')) ?> &bull; <?php endif; ?>
         <?php if(ayar('firma_email')): ?><?= escH(ayar('firma_email')) ?> &bull; <?php endif; ?>
+        <?php if(ayar('sosyal_instagram')): ?><?= escH(ayar('sosyal_instagram')) ?> &bull; <?php endif; ?>
         Belge tarihi: <?= date('d.m.Y H:i') ?>
     </div>
 </div>
