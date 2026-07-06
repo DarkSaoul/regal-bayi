@@ -1,4 +1,5 @@
 <?php
+// Regal Bayi Yönetim Sistemi — ortak yardımcı fonksiyonlar
 require_once __DIR__ . '/../config/database.php';
 
 // ── Güvenlik HTTP başlıkları ──────────────────────────────────
