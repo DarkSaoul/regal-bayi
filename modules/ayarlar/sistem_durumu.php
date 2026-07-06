@@ -59,6 +59,13 @@ require_once __DIR__ . '/../../includes/header.php';
 <div class="row g-3 mb-3">
     <div class="col-md-3 col-sm-6">
         <div class="card shadow-sm h-100"><div class="card-body">
+            <div class="text-muted small">Sürüm (commit)</div>
+            <div class="fw-bold"><code><?= escH(substr(gitMevcutCommit() ?? '-', 0, 10)) ?></code></div>
+            <a href="guncelleme.php" class="small">Güncellemeleri kontrol et →</a>
+        </div></div>
+    </div>
+    <div class="col-md-3 col-sm-6">
+        <div class="card shadow-sm h-100"><div class="card-body">
             <div class="text-muted small">PHP Versiyonu</div>
             <div class="fw-bold fs-5"><?= escH($phpVersiyon) ?></div>
         </div></div>

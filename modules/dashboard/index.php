@@ -551,8 +551,10 @@ if ($isYon) {
     try { $yedekBasarisiz = (int)$pdo->query("SELECT COUNT(*) FROM yedekleme_gecmisi WHERE basarili=0 AND created_at > DATE_SUB(NOW(), INTERVAL 7 DAY)")->fetchColumn(); }
     catch (Exception $e) {}
 }
+// GitHub'da bekleyen güncelleme var mı (login sırasında günlük önbelleklenir)
+$gitGeride = $isYon ? (int)ayar('git_geride_kalan_sayisi', '0') : 0;
 ?>
-<?php if ($bildirimlerAktif && (($gorStok && ($dusukStok > 0 || $sayimGecikti)) || ($gorSatis && $gecmisKisat > 0) || ($gorKasa && ($dusukKasaBakiyesi || $kapanisHatirlat)) || ($isYon && ($onayBekleyenGider > 0 || $yedekBasarisiz > 0)))): ?>
+<?php if ($bildirimlerAktif && (($gorStok && ($dusukStok > 0 || $sayimGecikti)) || ($gorSatis && $gecmisKisat > 0) || ($gorKasa && ($dusukKasaBakiyesi || $kapanisHatirlat)) || ($isYon && ($onayBekleyenGider > 0 || $yedekBasarisiz > 0 || $gitGeride > 0)))): ?>
 <div class="row g-3 mb-3">
     <?php if ($gorKasa && $dusukKasaBakiyesi): ?>
     <div class="col-md-6">
@@ -587,6 +589,15 @@ if ($isYon) {
             <i class="bi bi-cloud-slash fs-5 flex-shrink-0"></i>
             <span>Son 7 günde <strong><?= $yedekBasarisiz ?> başarısız</strong> yedekleme denemesi var.</span>
             <a href="<?= BASE_URL ?>/modules/yedekleme/" class="btn btn-sm btn-danger ms-auto">Yedeklemeye Git</a>
+        </div>
+    </div>
+    <?php endif; ?>
+    <?php if ($isYon && $gitGeride > 0): ?>
+    <div class="col-md-6">
+        <div class="alert alert-warning d-flex align-items-center gap-2 mb-0">
+            <i class="bi bi-cloud-arrow-down-fill fs-5 flex-shrink-0"></i>
+            <span>GitHub'da <strong><?= $gitGeride ?> yeni commit</strong> var — sistem güncel değil.</span>
+            <a href="<?= BASE_URL ?>/modules/ayarlar/guncelleme.php" class="btn btn-sm btn-warning ms-auto">Güncellemeye Git</a>
         </div>
     </div>
     <?php endif; ?>

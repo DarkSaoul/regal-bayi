@@ -1018,7 +1018,8 @@ require_once __DIR__ . '/../../includes/header.php';
                         <i class="bi bi-info-circle"></i> Daha fazla sistem geneli bilgi için:
                         <a href="sistem_durumu.php">Sistem Durumu</a> ·
                         <a href="veri_butunlugu.php">Veri Bütünlüğü Kontrolü</a> ·
-                        <a href="gunluk_ozet.php">Günlük Özet</a>
+                        <a href="gunluk_ozet.php">Günlük Özet</a> ·
+                        <a href="guncelleme.php">Sistem Güncellemesi</a>
                     </div>
                 </div>
 

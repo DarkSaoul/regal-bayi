@@ -54,6 +54,17 @@ function girisiTamamla(array $kullanici): void {
             header('Location: ' . BASE_URL . '/modules/yedekleme/');
             exit;
         }
+
+        // Günde bir kez GitHub'da güncelleme olup olmadığını kontrol et (dashboard uyarısı için önbelleklenir)
+        if (ayar('git_guncelleme_kontrolu_aktif','1') === '1') {
+            $sonKontrol = ayar('git_son_kontrol_zamani', '');
+            if (!$sonKontrol || (time() - strtotime($sonKontrol)) >= 86400) {
+                $durum = gitDurumKontrol();
+                if (empty($durum['hata'])) {
+                    ayarKaydet('git_geride_kalan_sayisi', (string)$durum['geride_kalan']);
+                }
+            }
+        }
     }
 
     // Rol bazlı giriş sonrası yönlendirme (Ayarlar → Sistem Geneli)

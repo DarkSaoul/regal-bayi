@@ -5,6 +5,10 @@
     Require all denied
 </FilesMatch>
 
+# .git klasörünün TAMAMINA web erişimini engelle (kaynak kodu/geçmişi ifşa eder)
+RewriteEngine On
+RewriteRule "(^|/)\.git" - [F,L]
+
 # Directory listing kapalı
 Options -Indexes
 

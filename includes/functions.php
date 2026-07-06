@@ -713,6 +713,150 @@ function kullaniciAvatarYukle(array $dosya, ?string $eskiDosya = null): ?string 
     return $dosyaAdi;
 }
 
+// ── Git tabanlı güncelleme bildirimi/uygulaması ───────────────
+// Yalnızca kendi sunucunuzda (paylaşımlı hosting değil) çalışır; exec() gerektirir.
+define('GIT_PROJE_KOKU', __DIR__ . '/..');
+
+function gitKomutCalistir(string $komut): array {
+    // XAMPP/Apache ortamından miras kalan LD_LIBRARY_PATH, sistemin git-remote-https
+    // yardımcı programının kullandığı libcurl/nghttp2 ile çakışıp "symbol lookup error"
+    // veriyor; git'i sistem kütüphaneleriyle çalıştırmak için bu değişken temizlenir.
+    $tamKomut = 'cd ' . escapeshellarg(GIT_PROJE_KOKU) . ' && env -u LD_LIBRARY_PATH ' . $komut . ' 2>&1';
+    exec($tamKomut, $cikti, $kod);
+    return [$kod === 0, implode("\n", $cikti)];
+}
+
+function gitMevcutCommit(): ?string {
+    [$ok, $cikti] = gitKomutCalistir('git rev-parse HEAD');
+    return $ok ? trim($cikti) : null;
+}
+
+// origin'i fetch eder ve yerel/uzak durumunu karşılaştırır — kod tabanında hiçbir değişiklik yapmaz.
+function gitDurumKontrol(): array {
+    [$fetchOk, $fetchCikti] = gitKomutCalistir('git fetch origin main --quiet');
+    if (!$fetchOk) {
+        return ['hata' => 'GitHub\'a erişilemedi: ' . $fetchCikti];
+    }
+    ayarKaydet('git_son_kontrol_zamani', date('Y-m-d H:i:s'));
+
+    [, $yerelDegisiklik] = gitKomutCalistir('git status --porcelain');
+    [$okGeriSayisi, $geriSayisi] = gitKomutCalistir('git rev-list --count HEAD..origin/main');
+    [$okMesaj, $mesajlar] = gitKomutCalistir('git log --pretty=format:"%h|%an|%ad|%s" --date=short HEAD..origin/main');
+
+    $commitler = [];
+    if ($okMesaj && trim($mesajlar) !== '') {
+        foreach (explode("\n", $mesajlar) as $satir) {
+            [$h, $yazar, $tarih, $mesaj] = array_pad(explode('|', $satir, 4), 4, '');
+            $commitler[] = ['hash' => $h, 'yazar' => $yazar, 'tarih' => $tarih, 'mesaj' => $mesaj];
+        }
+    }
+
+    return [
+        'guncel_mi' => $okGeriSayisi && (int)trim($geriSayisi) === 0,
+        'geride_kalan' => $okGeriSayisi ? (int)trim($geriSayisi) : null,
+        'yerel_degisiklik_var' => trim($yerelDegisiklik) !== '',
+        'commitler' => $commitler,
+        'yerel_commit' => gitMevcutCommit(),
+    ];
+}
+
+// origin/main'de olup henüz uygulanmamış migration dosyalarını (merge ETMEDEN) önizler.
+function gitBekleyenMigrationlar(): array {
+    [$ok, $liste] = gitKomutCalistir('git diff --name-only --diff-filter=A HEAD origin/main -- sql/');
+    if (!$ok) return [];
+    $adaylar = array_filter(array_map('trim', explode("\n", $liste)));
+    $adaylar = array_map('basename', $adaylar);
+    $adaylar = array_filter($adaylar, fn($d) => str_starts_with($d, 'migrasyon_'));
+
+    $uygulanmis = db()->query("SELECT dosya_adi FROM migration_gecmisi")->fetchAll(PDO::FETCH_COLUMN);
+    $bekleyen = array_values(array_diff($adaylar, $uygulanmis));
+    sort($bekleyen);
+    return $bekleyen;
+}
+
+// Fast-forward-only güncelleme uygular: yerel değişiklik varsa reddeder, merge çakışması olursa hiçbir şeyi bozmadan durur.
+function gitGuncellemeUygula(?int $kullaniciId): array {
+    $durum = gitDurumKontrol();
+    if (!empty($durum['hata'])) return ['basarili' => false, 'mesaj' => $durum['hata']];
+    if ($durum['yerel_degisiklik_var']) {
+        return ['basarili' => false, 'mesaj' => 'Sunucuda commit edilmemiş yerel değişiklikler var — güvenlik için güncelleme durduruldu.'];
+    }
+    if ($durum['guncel_mi']) {
+        return ['basarili' => false, 'mesaj' => 'Sistem zaten güncel.'];
+    }
+
+    $eskiCommit = gitMevcutCommit();
+
+    // 1) Otomatik veritabanı yedeği (mevcut yedekleme altyapısı ile)
+    $yedekDosya = __DIR__ . '/../backups/regal_bayi_guncelleme_oncesi_' . date('Y-m-d_H-i-s') . '.sql';
+    $yedekCikti = [];
+    if (!mysqldumpCalistir($yedekDosya, $yedekCikti)) {
+        return ['basarili' => false, 'mesaj' => 'Güncelleme öncesi yedek alınamadı, işlem iptal edildi: ' . implode(' ', $yedekCikti)];
+    }
+    yedekIslemSonrasi($yedekDosya, 'otomatik', 'tam', false, 'Git güncellemesi öncesi otomatik yedek');
+
+    // 2) Bakım modunu geçici aç
+    $bakimOncekiDurum = ayar('bakim_modu', '0');
+    if ($bakimOncekiDurum !== '1') ayarKaydet('bakim_modu', '1', 'Git güncellemesi için otomatik açıldı');
+
+    // 3) Fast-forward-only merge — herhangi bir sapma/çakışma varsa dosyalarda hiçbir değişiklik yapmadan başarısız olur
+    [$mergeOk, $mergeCikti] = gitKomutCalistir('git merge --ff-only origin/main');
+    if (!$mergeOk) {
+        if ($bakimOncekiDurum !== '1') ayarKaydet('bakim_modu', '0', 'Git güncellemesi başarısız, otomatik kapatıldı');
+        db()->prepare("INSERT INTO git_guncelleme_gecmisi (eski_commit,yeni_commit,yedek_dosya_adi,basarili,hata_metni,kullanici_id) VALUES (?,?,?,0,?,?)")
+            ->execute([$eskiCommit, $eskiCommit, basename($yedekDosya), $mergeCikti, $kullaniciId]);
+        return ['basarili' => false, 'mesaj' => 'Güncelleme uygulanamadı (fast-forward mümkün değil): ' . $mergeCikti];
+    }
+    $yeniCommit = gitMevcutCommit();
+
+    // 4) Bekleyen migration'ları sırayla uygula; biri hata verirse dur ve her şeyi eski commit'e geri al
+    $bekleyen = [];
+    $tumDosyalar = glob(__DIR__ . '/../sql/migrasyon_*.sql') ?: [];
+    $uygulanmis = db()->query("SELECT dosya_adi FROM migration_gecmisi")->fetchAll(PDO::FETCH_COLUMN);
+    foreach ($tumDosyalar as $yol) {
+        if (!in_array(basename($yol), $uygulanmis, true)) $bekleyen[] = $yol;
+    }
+    sort($bekleyen);
+
+    $migrationHata = null;
+    foreach ($bekleyen as $yol) {
+        try {
+            db()->exec(file_get_contents($yol));
+            db()->prepare("INSERT INTO migration_gecmisi (dosya_adi, kullanici_id) VALUES (?,?)")->execute([basename($yol), $kullaniciId]);
+        } catch (Exception $e) {
+            $migrationHata = basename($yol) . ': ' . $e->getMessage();
+            db()->prepare("INSERT INTO migration_gecmisi (dosya_adi, basarili, hata_metni, kullanici_id) VALUES (?,0,?,?)")
+                ->execute([basename($yol), $e->getMessage(), $kullaniciId]);
+            break;
+        }
+    }
+
+    if ($migrationHata) {
+        // Kod ve veritabanını tutarlı tutmak için ikisini de eski haline geri al
+        gitKomutCalistir('git reset --hard ' . escapeshellarg($eskiCommit));
+        $hataCikti = [];
+        mysqlRestoreCalistir($yedekDosya, $hataCikti);
+        if ($bakimOncekiDurum !== '1') ayarKaydet('bakim_modu', '0', 'Git güncellemesi başarısız, geri alındı');
+        db()->prepare("INSERT INTO git_guncelleme_gecmisi (eski_commit,yeni_commit,migration_sayisi,yedek_dosya_adi,basarili,hata_metni,geri_alindi,kullanici_id) VALUES (?,?,?,?,0,?,1,?)")
+            ->execute([$eskiCommit, $yeniCommit, count($bekleyen), basename($yedekDosya), $migrationHata, $kullaniciId]);
+        return ['basarili' => false, 'mesaj' => "Migration hatası nedeniyle güncelleme geri alındı: $migrationHata"];
+    }
+
+    if ($bakimOncekiDurum !== '1') ayarKaydet('bakim_modu', '0', 'Git güncellemesi tamamlandı, otomatik kapatıldı');
+    logla('git_guncelleme', 'sistem', 0, "$eskiCommit → $yeniCommit (" . count($bekleyen) . ' migration)');
+    db()->prepare("INSERT INTO git_guncelleme_gecmisi (eski_commit,yeni_commit,migration_sayisi,yedek_dosya_adi,basarili,kullanici_id) VALUES (?,?,?,?,1,?)")
+        ->execute([$eskiCommit, $yeniCommit, count($bekleyen), basename($yedekDosya), $kullaniciId]);
+
+    return ['basarili' => true, 'mesaj' => "Sistem güncellendi ($eskiCommit → $yeniCommit, " . count($bekleyen) . ' migration uygulandı).'];
+}
+
+// Belirtilen commit'e sabit (hard) olarak geri döner — yalnızca kod tabanını etkiler, DB'yi değil
+// (DB geri alma için ilgili git_guncelleme_gecmisi kaydındaki yedek dosyası ayrıca restore edilmelidir).
+function gitOncekiSurumeDon(string $commitHash): array {
+    [$ok, $cikti] = gitKomutCalistir('git reset --hard ' . escapeshellarg($commitHash));
+    return ['basarili' => $ok, 'mesaj' => $ok ? 'Kod tabanı belirtilen sürüme döndürüldü.' : $cikti];
+}
+
 // ── Ayarları doğrula: bilinen mantıksal çelişki/bağımlılıkları tarar ──
 function ayarlariDogrula(): array {
     $sorunlar = [];
