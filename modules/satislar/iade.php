@@ -4,6 +4,17 @@ define('BASE_URL', '/regal');
 require_once __DIR__ . '/../../includes/functions.php';
 auth(); yetki(['yonetici','kasiyer']);
 $pdo = db();
+
+// Kasiyer için iade yetkisi kullanıcı bazlı kısıtlanabilir (yönetici her zaman yapabilir)
+if (($_SESSION['rol'] ?? '') === 'kasiyer') {
+    $izin = $pdo->prepare("SELECT izin_iade_yapabilir FROM kullanicilar WHERE id=?");
+    $izin->execute([$_SESSION['kullanici_id']]);
+    if ((int)$izin->fetchColumn() === 0) {
+        flash('hata', 'İade/değişim işlemi yapma yetkiniz bulunmuyor.');
+        header('Location: ' . BASE_URL . '/modules/satislar/'); exit;
+    }
+}
+
 $id = (int)($_REQUEST['id'] ?? 0);
 
 $satis = $pdo->prepare("SELECT s.*, CONCAT(m.ad,' ',COALESCE(m.soyad,'')) AS musteri_adi FROM satislar s LEFT JOIN musteriler m ON s.musteri_id=m.id WHERE s.id=?");

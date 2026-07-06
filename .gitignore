@@ -42,6 +42,10 @@ uploads/urunler/*
 uploads/marka/*
 !uploads/marka/.gitkeep
 
+# Yüklenen kullanıcı avatarları
+uploads/avatar/*
+!uploads/avatar/.gitkeep
+
 # Yüklenen gider belgeleri (fiş/fatura)
 uploads/kasa/*
 !uploads/kasa/.gitkeep

@@ -544,7 +544,7 @@ if ($gorStok) {
         $sayimGecikti = !$sonSayim || (time() - strtotime($sonSayim)) / 86400 > $periyot;
     } catch (Exception $e) {}
 }
-$bildirimlerAktif = ayar('bildirimler_aktif','1') === '1';
+$bildirimlerAktif = ayar('bildirimler_aktif','1') === '1' && ($_SESSION['bildirim_tercihi'] ?? 'varsayilan') !== 'kapali';
 // Son 7 günde başarısız yedekleme denemesi var mı (yalnızca yönetici görür)
 $yedekBasarisiz = 0;
 if ($isYon) {

@@ -45,28 +45,58 @@ function auth() {
     }
     $_SESSION['son_aktivite'] = time();
 
-    // Tek oturum zorunluluğu: başka bir cihazdan giriş yapılınca bu oturum geçersiz olur
-    if (ayar('tek_oturum_zorunlu','0') === '1' && !empty($_SESSION['oturum_token'])) {
-        $guncelToken = db()->prepare("SELECT aktif_oturum_token FROM kullanicilar WHERE id=?");
-        $guncelToken->execute([$_SESSION['kullanici_id']]);
-        $guncelToken = $guncelToken->fetchColumn();
-        if ($guncelToken && $guncelToken !== $_SESSION['oturum_token']) {
-            session_unset();
-            session_destroy();
-            startSecureSession();
+    // Zorla çıkış / tek oturum / şifre geçerlilik / hesap süresi / zorunlu şifre değişikliği
+    // kontrolleri tek sorguda toplanır (her istekte ayrı ayrı sorgu atmamak için).
+    $hesapBilgi = db()->prepare(
+        "SELECT aktif_oturum_token, zorla_cikis_tarihi, sifre_degistirilme_tarihi, sifre_muaf,
+                sifre_degistir_zorunlu, hesap_gecerlilik_tarihi
+         FROM kullanicilar WHERE id=?"
+    );
+    $hesapBilgi->execute([$_SESSION['kullanici_id']]);
+    $hesapBilgi = $hesapBilgi->fetch();
+
+    if ($hesapBilgi) {
+        // Zorla çıkış: admin "oturumu sonlandır" dediyse, bu oturum girişten sonra iptal edilmiş demektir
+        if (!empty($hesapBilgi['zorla_cikis_tarihi']) && !empty($_SESSION['giris_zamani'])
+            && strtotime($hesapBilgi['zorla_cikis_tarihi']) > $_SESSION['giris_zamani']) {
+            session_unset(); session_destroy(); startSecureSession();
+            $_SESSION['flash'] = ['tip' => 'uyari', 'mesaj' => 'Oturumunuz yönetici tarafından sonlandırıldı.'];
+            header('Location: ' . BASE_URL . '/modules/auth/login.php');
+            exit;
+        }
+
+        // Hesap geçerlilik tarihi doldu mu
+        if (!empty($hesapBilgi['hesap_gecerlilik_tarihi']) && $hesapBilgi['hesap_gecerlilik_tarihi'] < date('Y-m-d')) {
+            db()->prepare("UPDATE kullanicilar SET aktif=0 WHERE id=?")->execute([$_SESSION['kullanici_id']]);
+            session_unset(); session_destroy(); startSecureSession();
+            $_SESSION['flash'] = ['tip' => 'hata', 'mesaj' => 'Hesabınızın geçerlilik süresi doldu. Yöneticinizle iletişime geçin.'];
+            header('Location: ' . BASE_URL . '/modules/auth/login.php');
+            exit;
+        }
+
+        // Tek oturum zorunluluğu: başka bir cihazdan giriş yapılınca bu oturum geçersiz olur
+        if (ayar('tek_oturum_zorunlu','0') === '1' && !empty($_SESSION['oturum_token'])
+            && $hesapBilgi['aktif_oturum_token'] && $hesapBilgi['aktif_oturum_token'] !== $_SESSION['oturum_token']) {
+            session_unset(); session_destroy(); startSecureSession();
             $_SESSION['flash'] = ['tip' => 'uyari', 'mesaj' => 'Hesabınızla başka bir cihazdan giriş yapıldığı için bu oturum kapatıldı.'];
             header('Location: ' . BASE_URL . '/modules/auth/login.php');
             exit;
         }
-    }
 
-    // Şifre geçerlilik süresi doldu mu — profil sayfası hariç her yerde zorla yönlendir
-    $gecerlilikGun = (int)ayar('sifre_gecerlilik_gun', '0');
-    if ($gecerlilikGun > 0 && !str_ends_with($_SERVER['SCRIPT_NAME'] ?? '', '/modules/kullanicilar/profil.php')) {
-        $degisimTarihi = db()->prepare("SELECT sifre_degistirilme_tarihi FROM kullanicilar WHERE id=?");
-        $degisimTarihi->execute([$_SESSION['kullanici_id']]);
-        $degisimTarihi = $degisimTarihi->fetchColumn();
-        if ($degisimTarihi && (time() - strtotime($degisimTarihi)) > $gecerlilikGun * 86400) {
+        $profilSayfasindaMi = str_ends_with($_SERVER['SCRIPT_NAME'] ?? '', '/modules/kullanicilar/profil.php');
+
+        // Admin "sonraki girişte şifre değiştir" zorunluluğu koydu mu
+        if ((int)$hesapBilgi['sifre_degistir_zorunlu'] === 1 && !$profilSayfasindaMi) {
+            flash('uyari', 'Devam etmeden önce şifrenizi değiştirmeniz gerekiyor.');
+            header('Location: ' . BASE_URL . '/modules/kullanicilar/profil.php');
+            exit;
+        }
+
+        // Şifre geçerlilik süresi doldu mu — muaf tutulan kullanıcılar ve profil sayfası hariç
+        $gecerlilikGun = (int)ayar('sifre_gecerlilik_gun', '0');
+        if ($gecerlilikGun > 0 && !$profilSayfasindaMi && (int)$hesapBilgi['sifre_muaf'] === 0
+            && $hesapBilgi['sifre_degistirilme_tarihi']
+            && (time() - strtotime($hesapBilgi['sifre_degistirilme_tarihi'])) > $gecerlilikGun * 86400) {
             flash('uyari', 'Şifrenizin süresi doldu, devam etmeden önce lütfen şifrenizi değiştirin.');
             header('Location: ' . BASE_URL . '/modules/kullanicilar/profil.php');
             exit;
@@ -151,6 +181,15 @@ function csrfVerify(): void {
 // Limit/pencere Ayarlar → Sistem Geneli'nden yönetilir (bf_max_deneme, bf_kilit_dakika).
 function bfPencereSaniye(): int { return max(60, (int)ayar('bf_kilit_dakika','15') * 60); }
 function bfMaxDeneme(): int { return max(1, (int)ayar('bf_max_deneme','5')); }
+
+// Şu anki giriş, Ayarlar → Çalışma Zamanı'nda tanımlı mesai saatleri/günleri dışında mı
+// (basit, ayarlara dayalı bir uyarı sinyalidir — davranışsal anomali tespiti değildir).
+function mesaiDisindaMi(): bool {
+    $gunler = array_filter(explode(',', ayar('calisma_gunleri', '1,2,3,4,5,6')));
+    if (!in_array((int)date('N'), array_map('intval', $gunler), true)) return true;
+    $simdi = date('H:i');
+    return $simdi < ayar('mesai_baslangic', '09:00') || $simdi > ayar('mesai_bitis', '19:00');
+}
 
 // Aynı IP'den tüm hesaplara toplam deneme sınırı (password spraying önlemi)
 const BF_IP_MAX = 20;
@@ -575,6 +614,103 @@ function veriMaskele(?string $deger, int $sonKarakter = 2): string {
     $uzunluk = mb_strlen($deger);
     if ($uzunluk <= $sonKarakter) return str_repeat('•', $uzunluk);
     return str_repeat('•', $uzunluk - $sonKarakter) . mb_substr($deger, -$sonKarakter);
+}
+
+// ── Genel amaçlı string şifreleme (TOTP gizli anahtarı gibi hassas alanlar için) ──
+// Yedekleme modülüyle aynı BACKUP_ENCRYPTION_KEY kullanılır; anahtar tanımsızsa null döner.
+function aesSifrele(string $duzMetin): ?string {
+    if (!BACKUP_ENCRYPTION_KEY) return null;
+    $iv = random_bytes(16);
+    $sifreli = openssl_encrypt($duzMetin, 'aes-256-cbc', hex2bin(BACKUP_ENCRYPTION_KEY), OPENSSL_RAW_DATA, $iv);
+    if ($sifreli === false) return null;
+    return base64_encode($iv . $sifreli);
+}
+
+function aesSifreCoz(string $sifreliMetin): ?string {
+    if (!BACKUP_ENCRYPTION_KEY) return null;
+    $ham = base64_decode($sifreliMetin, true);
+    if ($ham === false || strlen($ham) < 17) return null;
+    $iv = substr($ham, 0, 16);
+    $sifreli = substr($ham, 16);
+    $cozulmus = openssl_decrypt($sifreli, 'aes-256-cbc', hex2bin(BACKUP_ENCRYPTION_KEY), OPENSSL_RAW_DATA, $iv);
+    return $cozulmus === false ? null : $cozulmus;
+}
+
+// ── TOTP iki faktörlü doğrulama (RFC 6238) — tamamen yerel, dış servis gerekmez ──
+const BASE32_ALFABE = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ234567';
+
+function base32Encode(string $veri): string {
+    $bitler = '';
+    foreach (str_split($veri) as $karakter) $bitler .= str_pad(decbin(ord($karakter)), 8, '0', STR_PAD_LEFT);
+    $bitler = str_pad($bitler, (int)(ceil(strlen($bitler) / 5) * 5), '0', STR_PAD_RIGHT);
+    $sonuc = '';
+    foreach (str_split($bitler, 5) as $parca) $sonuc .= BASE32_ALFABE[bindec($parca)];
+    return $sonuc;
+}
+
+function base32Decode(string $b32): string {
+    $b32 = strtoupper(preg_replace('/[^A-Z2-7]/', '', $b32));
+    $bitler = '';
+    foreach (str_split($b32) as $karakter) {
+        $konum = strpos(BASE32_ALFABE, $karakter);
+        if ($konum === false) continue;
+        $bitler .= str_pad(decbin($konum), 5, '0', STR_PAD_LEFT);
+    }
+    $veri = '';
+    foreach (str_split($bitler, 8) as $bayt) {
+        if (strlen($bayt) === 8) $veri .= chr(bindec($bayt));
+    }
+    return $veri;
+}
+
+function totpSecretUret(): string {
+    return base32Encode(random_bytes(20));
+}
+
+function totpUri(string $secretBase32, string $hesapAdi): string {
+    $issuer = ayar('firma_adi', 'Regal Bayi');
+    return 'otpauth://totp/' . rawurlencode($issuer) . ':' . rawurlencode($hesapAdi)
+         . '?secret=' . $secretBase32 . '&issuer=' . rawurlencode($issuer) . '&digits=6&period=30&algorithm=SHA1';
+}
+
+function totpKodUret(string $secretBase32, ?int $zamanAdimi = null): string {
+    $zamanAdimi = $zamanAdimi ?? (int)floor(time() / 30);
+    // 8 baytlık büyük-endian sayaç (pack('N') 4 bayt üretir; 64-bit sayaç iki 32-bitlik parça olarak birleştirilir)
+    $sayac = pack('N2', ($zamanAdimi >> 32) & 0xFFFFFFFF, $zamanAdimi & 0xFFFFFFFF);
+    $anahtar = base32Decode($secretBase32);
+    $hmac = hash_hmac('sha1', $sayac, $anahtar, true);
+    $ofset = ord($hmac[19]) & 0x0F;
+    $parca = ((ord($hmac[$ofset]) & 0x7F) << 24)
+           | ((ord($hmac[$ofset + 1]) & 0xFF) << 16)
+           | ((ord($hmac[$ofset + 2]) & 0xFF) << 8)
+           | (ord($hmac[$ofset + 3]) & 0xFF);
+    return str_pad((string)($parca % 1000000), 6, '0', STR_PAD_LEFT);
+}
+
+// ±1 zaman adımı (30 sn) toleransla doğrular — saat sürüklenmesine karşı
+function totpDogrula(string $secretBase32, string $girilenKod): bool {
+    $girilenKod = preg_replace('/\s+/', '', $girilenKod);
+    if (!preg_match('/^\d{6}$/', $girilenKod)) return false;
+    $simdikiAdim = (int)floor(time() / 30);
+    for ($fark = -1; $fark <= 1; $fark++) {
+        if (hash_equals(totpKodUret($secretBase32, $simdikiAdim + $fark), $girilenKod)) return true;
+    }
+    return false;
+}
+
+// ── Kullanıcı avatar yükleme (markaGorseliYukle ile aynı desen) ──
+function kullaniciAvatarYukle(array $dosya, ?string $eskiDosya = null): ?string {
+    if (($dosya['error'] ?? UPLOAD_ERR_NO_FILE) === UPLOAD_ERR_NO_FILE) return null;
+    if ($dosya['error'] !== UPLOAD_ERR_OK) throw new Exception('Avatar yüklenemedi (hata kodu: ' . $dosya['error'] . ').');
+    if ($dosya['size'] > 2 * 1024 * 1024) throw new Exception('Avatar en fazla 2 MB olabilir.');
+    $ext = strtolower(pathinfo($dosya['name'], PATHINFO_EXTENSION));
+    if (!in_array($ext, ['jpg','jpeg','png','webp'], true)) throw new Exception('Avatar yalnızca JPG/PNG/WEBP olabilir.');
+    $hedefDir = __DIR__ . '/../uploads/avatar/';
+    if (!is_dir($hedefDir)) mkdir($hedefDir, 0777, true);
+    $dosyaAdi = 'avatar_' . date('YmdHis') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
+    if (!move_uploaded_file($dosya['tmp_name'], $hedefDir . $dosyaAdi)) throw new Exception('Avatar kaydedilemedi.');
+    if ($eskiDosya && is_file($hedefDir . basename($eskiDosya))) @unlink($hedefDir . basename($eskiDosya));
+    return $dosyaAdi;
 }
 
 // ── Ayarları doğrula: bilinen mantıksal çelişki/bağımlılıkları tarar ──
