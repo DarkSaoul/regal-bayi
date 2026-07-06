@@ -69,6 +69,7 @@ if ($adim === 'kurulum_yap' && $_SERVER['REQUEST_METHOD'] === 'POST') {
     $pass = $_POST['db_pass'] ?? '';
     $name = trim($_POST['db_name'] ?? 'regal_bayi');
     $olustur = isset($_POST['db_olustur']);
+    $ornekVeriYukle = isset($_POST['ornek_veri']);
 
     if (!$host || !$user || !$name) {
         $hata = 'Sunucu adresi, kullanıcı adı ve veritabanı adı zorunludur.';
@@ -94,6 +95,12 @@ if ($adim === 'kurulum_yap' && $_SERVER['REQUEST_METHOD'] === 'POST') {
                 if (!is_file($tamYol)) continue; // bazı kurulumlarda tüm dosyalar bulunmayabilir
                 $pdo->exec(file_get_contents($tamYol));
                 $uygulanan[] = basename($goreliYol);
+            }
+
+            // Örnek/demo veri isteğe bağlı olarak en son yüklenir (ornek-veri-sil.php ile sonradan temizlenebilir)
+            $ornekVeriYolu = __DIR__ . '/sql/ornek_veri.sql';
+            if ($ornekVeriYukle && is_file($ornekVeriYolu)) {
+                $pdo->exec(file_get_contents($ornekVeriYolu));
             }
 
             // migration_gecmisi tablosuna (varsa) bu kurulumun bir parçası olarak işlendiğini kaydet
@@ -122,6 +129,7 @@ if ($adim === 'kurulum_yap' && $_SERVER['REQUEST_METHOD'] === 'POST') {
             }
 
             $_SESSION['kurulum_db'] = compact('host', 'port', 'user', 'pass', 'name');
+            $_SESSION['ornek_veri_yuklendi'] = $ornekVeriYukle;
             $adim = 'admin_belirle';
         } catch (Exception $e) {
             $hata = 'Kurulum sırasında hata: ' . $e->getMessage();
@@ -206,9 +214,13 @@ if ($adim === 'db_form') {
             <input type="password" name="db_pass" class="form-control" value=""></div>
         <div class="mb-2"><label class="form-label small fw-semibold">Veritabanı Adı</label>
             <input type="text" name="db_name" class="form-control" value="' . h($_POST['db_name'] ?? 'regal_bayi') . '" required></div>
-        <div class="form-check mb-3">
+        <div class="form-check mb-2">
             <input class="form-check-input" type="checkbox" name="db_olustur" id="olustur" checked>
             <label class="form-check-label small" for="olustur">Veritabanı mevcut değilse otomatik oluştur</label>
+        </div>
+        <div class="form-check mb-3">
+            <input class="form-check-input" type="checkbox" name="ornek_veri" id="ornekVeri" checked>
+            <label class="form-check-label small" for="ornekVeri">Örnek/demo veri de yükle <small class="text-muted">(ürün, müşteri, satış örnekleri — sonradan "Örnek Verileri Sil" ile tek tıkla temizlenebilir)</small></label>
         </div>
         <button type="submit" class="btn btn-primary w-100"><i class="bi bi-database-check"></i> Bağlan ve Kur</button>
     </form>';
@@ -235,10 +247,14 @@ if ($adim === 'admin_belirle') {
 
 if ($adim === 'tamamlandi') {
     sihirbazBaslik('Kurulum Tamamlandı');
+    $ornekVeriVardi = $_SESSION['ornek_veri_yuklendi'] ?? false;
+    unset($_SESSION['ornek_veri_yuklendi']);
     echo '<div class="alert alert-success"><i class="bi bi-check-circle-fill"></i> Sistem başarıyla kuruldu!</div>
-    <p class="small">Kullanıcı adı: <code>admin</code> — az önce belirlediğiniz şifreyle giriş yapabilirsiniz.</p>
-    <div class="alert alert-warning small"><i class="bi bi-exclamation-triangle"></i> Şemayla birlikte gelen <strong>örnek/demo veriler</strong> varsa (ürünler, müşteriler, satışlar vb.), gerçek kullanıma geçmeden önce <a href="ornek-veri-sil.php">Örnek Verileri Sil</a> sayfasını kullanarak temizleyin. Bu sayfa yalnızca bir kez çalışır ve kendini otomatik olarak siler.</div>
-    <a href="modules/auth/login.php" class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-right"></i> Giriş Sayfasına Git</a>';
+    <p class="small">Kullanıcı adı: <code>admin</code> — az önce belirlediğiniz şifreyle giriş yapabilirsiniz.</p>';
+    if ($ornekVeriVardi) {
+        echo '<div class="alert alert-warning small"><i class="bi bi-exclamation-triangle"></i> Örnek/demo veriler yüklendi (ürünler, müşteriler, satışlar vb.). Gerçek kullanıma geçmeden önce <a href="ornek-veri-sil.php">Örnek Verileri Sil</a> sayfasını kullanarak temizleyin. Bu sayfa yalnızca bir kez çalışır ve kendini otomatik olarak siler.</div>';
+    }
+    echo '<a href="modules/auth/login.php" class="btn btn-primary w-100"><i class="bi bi-box-arrow-in-right"></i> Giriş Sayfasına Git</a>';
     sihirbazAlt();
     exit;
 }
