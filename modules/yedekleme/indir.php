@@ -7,10 +7,11 @@ $dosya   = basename($_GET['dosya'] ?? '');
 $yedekDir = __DIR__ . '/../../backups/';
 $yol     = $yedekDir . $dosya;
 
-if (!$dosya || !file_exists($yol) || !str_ends_with($dosya, '.sql')) {
+if (!$dosya || !file_exists($yol) || !preg_match('/\.(sql|sql\.gz|sql\.gz\.enc|sql\.enc|zip)$/', $dosya)) {
     flash('hata', 'Dosya bulunamadı.');
     header('Location: index.php'); exit;
 }
+logla('yedek_indirildi', 'yedekleme', 0, $dosya);
 
 header('Content-Type: application/octet-stream');
 header('Content-Disposition: attachment; filename="' . $dosya . '"');

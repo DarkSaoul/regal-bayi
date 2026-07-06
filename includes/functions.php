@@ -635,7 +635,7 @@ function bugunYedekVarMi(): bool {
 // mysqldump'ı çalıştırır. Şifre komut satırı yerine geçici, 0600 izinli bir
 // defaults dosyasından okunur; böylece `ps` çıktısında (process list) görünmez.
 // $hataCikti referansına stderr yazılır (arayüzde mesaj için).
-function mysqldumpCalistir(string $hedef, ?array &$hataCikti = null): bool {
+function mysqldumpCalistir(string $hedef, ?array &$hataCikti = null, array $opts = []): bool {
     $cnf = tempnam(sys_get_temp_dir(), 'regal_my');
     if ($cnf === false) { $hataCikti = ['Geçici yapılandırma dosyası oluşturulamadı.']; return false; }
     chmod($cnf, 0600);
@@ -643,8 +643,18 @@ function mysqldumpCalistir(string $hedef, ?array &$hataCikti = null): bool {
         "[client]\nuser=\"" . str_replace('"', '\"', DB_USER) . "\"\n"
         . "password=\"" . str_replace('"', '\"', DB_PASS) . "\"\n");
 
+    $ekParam = '';
+    if (!empty($opts['sadece_sema'])) {
+        $ekParam .= ' --no-data';
+    }
+    foreach ($opts['haric_tablolar'] ?? [] as $tablo) {
+        $tablo = preg_replace('/[^a-zA-Z0-9_]/', '', $tablo);
+        if ($tablo !== '') $ekParam .= ' --ignore-table=' . escapeshellarg(DB_NAME . '.' . $tablo);
+    }
+
     $cmd = escapeshellcmd('/opt/lampp/bin/mysqldump')
          . ' --defaults-extra-file=' . escapeshellarg($cnf)
+         . $ekParam
          . ' ' . escapeshellarg(DB_NAME)
          . ' > ' . escapeshellarg($hedef) . ' 2>&1';
     exec($cmd, $hataCikti, $kod);
@@ -652,16 +662,259 @@ function mysqldumpCalistir(string $hedef, ?array &$hataCikti = null): bool {
     return $kod === 0 && file_exists($hedef);
 }
 
+// .sql dosyasını mevcut veritabanına geri yükler (DESTRUCTIVE — çağıran taraf onay almalı)
+function mysqlRestoreCalistir(string $dosya, ?array &$hataCikti = null, ?string $hedefDb = null): bool {
+    $cnf = tempnam(sys_get_temp_dir(), 'regal_my');
+    if ($cnf === false) { $hataCikti = ['Geçici yapılandırma dosyası oluşturulamadı.']; return false; }
+    chmod($cnf, 0600);
+    file_put_contents($cnf,
+        "[client]\nuser=\"" . str_replace('"', '\"', DB_USER) . "\"\n"
+        . "password=\"" . str_replace('"', '\"', DB_PASS) . "\"\n");
+
+    $cmd = escapeshellcmd('/opt/lampp/bin/mysql')
+         . ' --defaults-extra-file=' . escapeshellarg($cnf)
+         . ' ' . escapeshellarg($hedefDb ?? DB_NAME)
+         . ' < ' . escapeshellarg($dosya) . ' 2>&1';
+    exec($cmd, $hataCikti, $kod);
+    unlink($cnf);
+    return $kod === 0;
+}
+
+// Yedek sıklığı ayarına göre gün aralığı (gunluk/haftalik/aylik)
+function yedekSiklikGun(): int {
+    return ['gunluk' => 1, 'haftalik' => 7, 'aylik' => 30][ayar('yedek_sikligi', 'haftalik')] ?? 7;
+}
+
 function otomatikYedekAl(): bool {
     $yedekDir = __DIR__ . '/../backups/';
     if (!is_dir($yedekDir)) mkdir($yedekDir, 0777, true);
     $dosyaAdi = 'regal_bayi_oto_' . date('Y-m-d_H-i-s') . '.sql';
     $hedef    = $yedekDir . $dosyaAdi;
-    if (mysqldumpCalistir($hedef)) {
+    $basarili = mysqldumpCalistir($hedef);
+    if ($basarili) {
         ayarKaydet('son_oto_yedek', date('Y-m-d H:i:s'));
-        return true;
+        yedekIslemSonrasi($hedef, 'otomatik', 'tam', false);
     }
-    return false;
+    return $basarili;
+}
+
+// ── Yedek dosyası işleme: sıkıştırma / şifreleme / ikinci konum / geçmiş kaydı ──
+function yedekSikistir(string $dosya): string {
+    $hedef = $dosya . '.gz';
+    $in = fopen($dosya, 'rb'); $out = gzopen($hedef, 'wb9');
+    if (!$in || !$out) return $dosya;
+    while (!feof($in)) gzwrite($out, fread($in, 1024 * 512));
+    fclose($in); gzclose($out);
+    unlink($dosya);
+    return $hedef;
+}
+
+function yedekAcSikistirma(string $dosyaGz): string {
+    $hedef = tempnam(sys_get_temp_dir(), 'regal_acik') . '.sql';
+    $in = gzopen($dosyaGz, 'rb'); $out = fopen($hedef, 'wb');
+    while (!gzeof($in)) fwrite($out, gzread($in, 1024 * 512));
+    gzclose($in); fclose($out);
+    return $hedef;
+}
+
+function yedekSifrele(string $dosya): string {
+    if (!BACKUP_ENCRYPTION_KEY) return $dosya;
+    $hedef = $dosya . '.enc';
+    $iv = random_bytes(16);
+    $veri = file_get_contents($dosya);
+    $sifreli = openssl_encrypt($veri, 'aes-256-cbc', hex2bin(BACKUP_ENCRYPTION_KEY), OPENSSL_RAW_DATA, $iv);
+    if ($sifreli === false) return $dosya;
+    file_put_contents($hedef, $iv . $sifreli);
+    unlink($dosya);
+    return $hedef;
+}
+
+function yedekSifreCoz(string $dosyaEnc): ?string {
+    if (!BACKUP_ENCRYPTION_KEY) return null;
+    $icerik = file_get_contents($dosyaEnc);
+    if ($icerik === false || strlen($icerik) < 17) return null;
+    $iv = substr($icerik, 0, 16);
+    $sifreli = substr($icerik, 16);
+    $cozulmus = openssl_decrypt($sifreli, 'aes-256-cbc', hex2bin(BACKUP_ENCRYPTION_KEY), OPENSSL_RAW_DATA, $iv);
+    if ($cozulmus === false) return null;
+    $hedef = tempnam(sys_get_temp_dir(), 'regal_coz');
+    file_put_contents($hedef, $cozulmus);
+    return $hedef;
+}
+
+// uploads/ klasörünü (ve istenirse ek dosyaları, örn. DB dump'ını) tek bir zip'e paketler
+function uploadsYedekle(string $zipHedef, array $ekDosyalar = []): bool {
+    if (!class_exists('ZipArchive')) return false;
+    $zip = new ZipArchive();
+    if ($zip->open($zipHedef, ZipArchive::CREATE) !== true) return false;
+    foreach ($ekDosyalar as $goreliAd => $gercekYol) {
+        if (is_file($gercekYol)) $zip->addFile($gercekYol, $goreliAd);
+    }
+    $kaynak = realpath(__DIR__ . '/../uploads');
+    if ($kaynak !== false) {
+        $iterator = new RecursiveIteratorIterator(new RecursiveDirectoryIterator($kaynak, FilesystemIterator::SKIP_DOTS));
+        foreach ($iterator as $dosya) {
+            $goreliYol = 'uploads/' . substr($dosya->getPathname(), strlen($kaynak) + 1);
+            $zip->addFile($dosya->getPathname(), $goreliYol);
+        }
+    }
+    $zip->close();
+    return true;
+}
+
+function yedekGecmisiKaydet(array $veri): int {
+    db()->prepare(
+        "INSERT INTO yedekleme_gecmisi (dosya_adi,tip,kapsam,dosyalar_dahil,sikistirilmis,sifreli,boyut_bayt,sha256,not_metni,basarili,hata_metni,ikinci_konum_kopyalandi,kullanici_id)
+         VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)"
+    )->execute([
+        $veri['dosya_adi'], $veri['tip'] ?? 'manuel', $veri['kapsam'] ?? 'tam',
+        (int)($veri['dosyalar_dahil'] ?? 0), (int)($veri['sikistirilmis'] ?? 0), (int)($veri['sifreli'] ?? 0),
+        $veri['boyut_bayt'] ?? 0, $veri['sha256'] ?? null, $veri['not_metni'] ?? null,
+        (int)($veri['basarili'] ?? 1), $veri['hata_metni'] ?? null, (int)($veri['ikinci_konum_kopyalandi'] ?? 0),
+        $veri['kullanici_id'] ?? ($_SESSION['kullanici_id'] ?? null),
+    ]);
+    return (int)db()->lastInsertId();
+}
+
+// Yedek alındıktan sonra ortak akış: checksum, ikinci konuma kopyalama, geçmiş kaydı, anormal boyut kontrolü
+function yedekIslemSonrasi(string $dosyaYolu, string $tip, string $kapsam, bool $dosyalarDahil, ?string $not = null): array {
+    $boyut = filesize($dosyaYolu);
+    $sha256 = hash_file('sha256', $dosyaYolu);
+    $ikinciKonumOk = yedekIkinciKonumaKopyala($dosyaYolu);
+
+    $uyari = null;
+    $ortalama = db()->query("SELECT AVG(boyut_bayt) FROM (SELECT boyut_bayt FROM yedekleme_gecmisi WHERE basarili=1 ORDER BY id DESC LIMIT 5) t")->fetchColumn();
+    if ($ortalama && $ortalama > 0 && $boyut < $ortalama * 0.5) {
+        $uyari = 'Bu yedek, önceki yedeklerin ortalama boyutunun (' . round($ortalama / 1024, 1) . ' KB) belirgin şekilde altında (' . round($boyut / 1024, 1) . ' KB) — dump yarım kalmış olabilir.';
+    }
+
+    $id = yedekGecmisiKaydet([
+        'dosya_adi' => basename($dosyaYolu), 'tip' => $tip, 'kapsam' => $kapsam,
+        'dosyalar_dahil' => $dosyalarDahil, 'sikistirilmis' => str_ends_with($dosyaYolu, '.gz') || str_contains($dosyaYolu, '.gz.'),
+        'sifreli' => str_ends_with($dosyaYolu, '.enc'), 'boyut_bayt' => $boyut, 'sha256' => $sha256,
+        'not_metni' => $not, 'basarili' => 1, 'ikinci_konum_kopyalandi' => $ikinciKonumOk,
+    ]);
+    logla('yedek_alindi', 'yedekleme', $id, basename($dosyaYolu) . ' (' . round($boyut / 1024, 1) . ' KB)');
+    return ['id' => $id, 'uyari' => $uyari, 'sha256' => $sha256, 'boyut' => $boyut];
+}
+
+function yedekIkinciKonumaKopyala(string $dosyaYolu): bool {
+    $konum = trim(ayar('yedek_ikinci_konum', ''));
+    if ($konum === '') return false;
+    if (!is_dir($konum) || !is_writable($konum)) return false;
+    return @copy($dosyaYolu, rtrim($konum, '/') . '/' . basename($dosyaYolu));
+}
+
+// Saklama politikası: gün ve/veya adet sınırına göre eski yedekleri siler.
+// Her ayın ilk günü alınan yedekler (dosya adındaki tarihe göre) uzun vadeli arşiv sayılıp korunur.
+function yedekTemizle(): int {
+    $yedekDir = __DIR__ . '/../backups/';
+    $gun = (int)ayar('yedek_saklama_gun', '90');
+    $adet = (int)ayar('yedek_saklama_adet', '0');
+    if ($gun <= 0 && $adet <= 0) return 0;
+
+    $dosyalar = [];
+    foreach (glob($yedekDir . '*.{sql,sql.gz,sql.gz.enc,sql.enc}', GLOB_BRACE) ?: [] as $d) {
+        $dosyalar[] = ['yol' => $d, 'zaman' => filemtime($d)];
+    }
+    usort($dosyalar, fn($a, $b) => $b['zaman'] - $a['zaman']);
+
+    $silinen = 0;
+    foreach ($dosyalar as $i => $d) {
+        $ayinIlkGunu = date('d', $d['zaman']) === '01';
+        if ($ayinIlkGunu) continue; // arşiv niteliğinde, korunur
+        $eski = $gun > 0 && (time() - $d['zaman']) > $gun * 86400;
+        $fazlaAdet = $adet > 0 && $i >= $adet;
+        if ($eski || $fazlaAdet) {
+            @unlink($d['yol']);
+            db()->prepare("DELETE FROM yedekleme_gecmisi WHERE dosya_adi=?")->execute([basename($d['yol'])]);
+            $silinen++;
+        }
+    }
+    return $silinen;
+}
+
+// Yedek dosyasını (gerekirse şifre çöz + aç) geçici bir veritabanına deneme yükler, gerçek veriye dokunmaz.
+function yedekTestGeriYukle(string $dosyaYolu): array {
+    $calismaDosyasi = yedekDuzMetneCevir($dosyaYolu);
+    if (!$calismaDosyasi) return ['basarili' => false, 'mesaj' => 'Dosya çözülemedi (şifreleme anahtarı eksik/uyuşmuyor ya da format tanınmadı).'];
+    try {
+        $testDb = 'regal_test_restore_' . bin2hex(random_bytes(4));
+        db()->exec("CREATE DATABASE `$testDb` CHARACTER SET utf8mb4");
+        $hata = [];
+        $basarili = mysqlRestoreCalistir($calismaDosyasi, $hata, $testDb);
+        db()->exec("DROP DATABASE `$testDb`");
+
+        return $basarili
+            ? ['basarili' => true, 'mesaj' => 'Test geri yükleme başarılı — dosya bütünlüğü doğrulandı (gerçek veriye dokunulmadı).']
+            : ['basarili' => false, 'mesaj' => 'Test geri yükleme başarısız: ' . implode(' ', array_slice($hata, -3))];
+    } catch (Exception $e) {
+        return ['basarili' => false, 'mesaj' => 'Hata: ' . $e->getMessage()];
+    } finally {
+        @unlink($calismaDosyasi);
+    }
+}
+
+// Bir .sql dump içeriğini tarayıp tablo başına yaklaşık satır sayısı çıkarır
+// (mysqldump --extended-insert formatındaki "),(" ayraçlarını sayar; tam kesin değildir ama yeterince yakındır).
+function yedekTabloSatirTahmini(string $sqlIcerik): array {
+    $sonuc = [];
+    if (preg_match_all('/INSERT INTO `([a-zA-Z0-9_]+)`[^;]*VALUES\s*(.+?);/is', $sqlIcerik, $eslesmeler, PREG_SET_ORDER)) {
+        foreach ($eslesmeler as $e) {
+            $tablo = $e[1];
+            $adet = substr_count($e[2], '),(') + 1;
+            $sonuc[$tablo] = ($sonuc[$tablo] ?? 0) + $adet;
+        }
+    }
+    return $sonuc;
+}
+
+// "Dosyaları dahil et" ile alınmış birleşik yedek zip'inden veritabanı dump'ını çıkarır
+function yedekZipIcindenSqlCikar(string $zipYolu): ?string {
+    if (!class_exists('ZipArchive')) return null;
+    $zip = new ZipArchive();
+    if ($zip->open($zipYolu) !== true) return null;
+    $icerik = $zip->getFromName('regal_bayi_dump.sql');
+    $zip->close();
+    if ($icerik === false) return null;
+    $hedef = tempnam(sys_get_temp_dir(), 'regal_zipsql') . '.sql';
+    file_put_contents($hedef, $icerik);
+    return $hedef;
+}
+
+// Yedek dosyasını (şifreliyse çözer, sıkıştırılmışsa açar, zip ise dump'ı çıkarır) geçici düz .sql olarak döndürür.
+// Çağıran taraf işi bitince dönen yolu silmelidir. Çözülemezse null döner.
+function yedekDuzMetneCevir(string $dosyaYolu): ?string {
+    // Not: her adımın çıktısı tempnam() ile isimlendirildiğinden dosya adı orijinal
+    // uzantıyı taşımaz — bu yüzden hangi dönüşümün uygulanacağına ORİJİNAL dosya
+    // adındaki uzantı zincirine bakarak karar veriyoruz, ara dosyanın adına değil.
+    $ad = strtolower($dosyaYolu);
+    $calisma = $dosyaYolu; $gecici = null;
+    if (str_ends_with($ad, '.enc')) {
+        $calisma = yedekSifreCoz($calisma);
+        if (!$calisma) return null;
+        $gecici = $calisma;
+        $ad = substr($ad, 0, -4);
+    }
+    if (str_ends_with($ad, '.gz')) {
+        $acilan = yedekAcSikistirma($calisma);
+        if ($gecici) @unlink($gecici);
+        $calisma = $acilan; $gecici = $acilan;
+        $ad = substr($ad, 0, -3);
+    }
+    if (str_ends_with($ad, '.zip')) {
+        $cikan = yedekZipIcindenSqlCikar($calisma);
+        if ($gecici) @unlink($gecici);
+        if (!$cikan) return null;
+        $calisma = $cikan; $gecici = $cikan;
+    }
+    if ($calisma === $dosyaYolu) {
+        // Ne şifreli ne sıkıştırılmış ne zip — orijinali kopyala ki çağıran taraf güvenle silebilsin
+        $kopya = tempnam(sys_get_temp_dir(), 'regal_duz');
+        copy($dosyaYolu, $kopya);
+        return $kopya;
+    }
+    return $calisma;
 }
 
 // ── Bildirim sayaçları (tek sorguda) ─────────────────────────

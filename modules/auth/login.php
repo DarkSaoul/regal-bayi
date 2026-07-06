@@ -46,10 +46,17 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
             logla('giris', 'auth', (int)$kullanici['id'], $kullanici['ad_soyad'] . ' giriş yaptı');
             if ($kullanici['rol'] === 'yonetici') {
-                // Haftalık oto-yedek: son 7 günde alınmamışsa otomatik al
+                // Ayarlardan gelen sıklığa göre oto-yedek: süresi geçmişse otomatik al
                 $sonOtoYedek = ayar('son_oto_yedek', '');
-                if (!$sonOtoYedek || (time() - strtotime($sonOtoYedek)) >= 7 * 86400) {
+                if (!$sonOtoYedek || (time() - strtotime($sonOtoYedek)) >= yedekSiklikGun() * 86400) {
                     otomatikYedekAl();
+                    yedekTemizle();
+                }
+                // Disk kritik seviyedeyse programa bağlı kalmadan hemen eski yedekleri temizle
+                $diskEsikGb = (float)ayar('disk_uyari_esik_gb', '1');
+                $diskBosGb = @disk_free_space(__DIR__ . '/../..');
+                if ($diskEsikGb > 0 && $diskBosGb !== false && ($diskBosGb / 1073741824) < $diskEsikGb) {
+                    yedekTemizle();
                 }
                 // Bugün henüz yedek alınmamışsa yedekleme sayfasına zorla
                 if (!bugunYedekVarMi()) {

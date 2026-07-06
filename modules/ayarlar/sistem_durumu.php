@@ -119,6 +119,26 @@ require_once __DIR__ . '/../../includes/header.php';
     </div>
 </div>
 
+<?php
+$yedekSaglik = $pdo->query(
+    "SELECT COUNT(*) AS toplam, SUM(basarili=1) AS basarili, SUM(basarili=0) AS basarisiz
+     FROM yedekleme_gecmisi WHERE created_at > DATE_SUB(NOW(), INTERVAL 30 DAY)"
+)->fetch();
+?>
+<div class="row g-3 mb-3">
+    <div class="col-12">
+        <div class="card shadow-sm <?= (int)$yedekSaglik['basarisiz'] > 0 ? 'border-danger' : '' ?>">
+            <div class="card-header bg-white fw-semibold"><i class="bi bi-shield-check text-primary"></i> Yedekleme Sağlığı (son 30 gün)</div>
+            <div class="card-body d-flex gap-4 flex-wrap align-items-center">
+                <div><div class="text-muted small">Toplam Deneme</div><div class="fw-bold fs-5"><?= (int)$yedekSaglik['toplam'] ?></div></div>
+                <div><div class="text-muted small">Başarılı</div><div class="fw-bold fs-5 text-success"><?= (int)$yedekSaglik['basarili'] ?></div></div>
+                <div><div class="text-muted small">Başarısız</div><div class="fw-bold fs-5 <?= (int)$yedekSaglik['basarisiz'] > 0 ? 'text-danger' : '' ?>"><?= (int)$yedekSaglik['basarisiz'] ?></div></div>
+                <a href="<?= BASE_URL ?>/modules/yedekleme/" class="btn btn-sm btn-outline-primary ms-auto">Yedekleme Sayfası →</a>
+            </div>
+        </div>
+    </div>
+</div>
+
 <div class="row g-3">
     <div class="col-lg-6">
         <div class="card shadow-sm mb-3">

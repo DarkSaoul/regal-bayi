@@ -15,6 +15,7 @@ define('DB_PASS',    $_ENV['DB_PASS']    ?? '');
 define('DB_NAME',    $_ENV['DB_NAME']    ?? 'regal_bayi');
 define('APP_ENV',    $_ENV['APP_ENV']    ?? 'production');
 define('SESSION_TIMEOUT', (int)($_ENV['SESSION_TIMEOUT'] ?? 1800));
+define('BACKUP_ENCRYPTION_KEY', $_ENV['YEDEK_SIFRELEME_ANAHTARI'] ?? '');
 
 function db() {
     static $pdo = null;

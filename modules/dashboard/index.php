@@ -545,8 +545,14 @@ if ($gorStok) {
     } catch (Exception $e) {}
 }
 $bildirimlerAktif = ayar('bildirimler_aktif','1') === '1';
+// Son 7 günde başarısız yedekleme denemesi var mı (yalnızca yönetici görür)
+$yedekBasarisiz = 0;
+if ($isYon) {
+    try { $yedekBasarisiz = (int)$pdo->query("SELECT COUNT(*) FROM yedekleme_gecmisi WHERE basarili=0 AND created_at > DATE_SUB(NOW(), INTERVAL 7 DAY)")->fetchColumn(); }
+    catch (Exception $e) {}
+}
 ?>
-<?php if ($bildirimlerAktif && (($gorStok && ($dusukStok > 0 || $sayimGecikti)) || ($gorSatis && $gecmisKisat > 0) || ($gorKasa && ($dusukKasaBakiyesi || $kapanisHatirlat)) || ($isYon && $onayBekleyenGider > 0))): ?>
+<?php if ($bildirimlerAktif && (($gorStok && ($dusukStok > 0 || $sayimGecikti)) || ($gorSatis && $gecmisKisat > 0) || ($gorKasa && ($dusukKasaBakiyesi || $kapanisHatirlat)) || ($isYon && ($onayBekleyenGider > 0 || $yedekBasarisiz > 0)))): ?>
 <div class="row g-3 mb-3">
     <?php if ($gorKasa && $dusukKasaBakiyesi): ?>
     <div class="col-md-6">
@@ -572,6 +578,15 @@ $bildirimlerAktif = ayar('bildirimler_aktif','1') === '1';
             <i class="bi bi-hourglass-split fs-5 flex-shrink-0"></i>
             <span><strong><?= $onayBekleyenGider ?> gider</strong> onay bekliyor.</span>
             <a href="<?= BASE_URL ?>/modules/finans/onay.php" class="btn btn-sm btn-warning ms-auto">Onaylara Git</a>
+        </div>
+    </div>
+    <?php endif; ?>
+    <?php if ($isYon && $yedekBasarisiz > 0): ?>
+    <div class="col-md-6">
+        <div class="alert alert-danger d-flex align-items-center gap-2 mb-0">
+            <i class="bi bi-cloud-slash fs-5 flex-shrink-0"></i>
+            <span>Son 7 günde <strong><?= $yedekBasarisiz ?> başarısız</strong> yedekleme denemesi var.</span>
+            <a href="<?= BASE_URL ?>/modules/yedekleme/" class="btn btn-sm btn-danger ms-auto">Yedeklemeye Git</a>
         </div>
     </div>
     <?php endif; ?>
