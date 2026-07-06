@@ -56,7 +56,7 @@ function girisiTamamla(array $kullanici): void {
         }
 
         // Günde bir kez GitHub'da güncelleme olup olmadığını kontrol et (dashboard uyarısı için önbelleklenir)
-        if (ayar('git_guncelleme_kontrolu_aktif','1') === '1') {
+        if (ayar('git_guncelleme_kontrolu_aktif','1') === '1' && gitGuncellemeDesteklerMi()) {
             $sonKontrol = ayar('git_son_kontrol_zamani', '');
             if (!$sonKontrol || (time() - strtotime($sonKontrol)) >= 86400) {
                 $durum = gitDurumKontrol();

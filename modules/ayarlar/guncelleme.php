@@ -95,6 +95,11 @@ require_once __DIR__ . '/../../includes/header.php';
     <a href="index.php" class="btn btn-outline-secondary btn-sm">← Ayarlar</a>
 </div>
 
+<?php if (!gitGuncellemeDesteklerMi()): ?>
+<div class="alert alert-secondary"><i class="bi bi-info-circle"></i> Bu özellik yalnızca <strong>git kurulu Linux sunucularında</strong> kullanılabilir. Windows üzerinde çalışan kurulumlarda güncellemeler manuel olarak (GitHub'dan yeni sürümü indirip dosyaları değiştirerek) uygulanmalıdır.</div>
+<?php require_once __DIR__ . '/../../includes/footer.php'; exit; ?>
+<?php endif; ?>
+
 <div class="card shadow-sm mb-3">
     <div class="card-body d-flex justify-content-between align-items-center flex-wrap gap-2">
         <div>

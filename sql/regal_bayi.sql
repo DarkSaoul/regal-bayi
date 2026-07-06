@@ -1,9 +1,9 @@
 -- Regal Bayi Yönetim Sistemi - Veritabanı Şeması
+-- NOT: Bu dosya artık CREATE DATABASE/USE komutu İÇERMEZ (kasıtlı) — veritabanı
+-- oluşturma/seçme işi install.php tarafından kullanıcının seçtiği isimle yapılır.
+-- Elle çalıştıracaksanız: mysql -u root -p HEDEF_DB_ADI < sql/regal_bayi.sql
 SET NAMES utf8mb4;
 SET FOREIGN_KEY_CHECKS = 0;
-
-CREATE DATABASE IF NOT EXISTS regal_bayi CHARACTER SET utf8mb4 COLLATE utf8mb4_turkish_ci;
-USE regal_bayi;
 
 -- Kullanıcılar
 CREATE TABLE kullanicilar (

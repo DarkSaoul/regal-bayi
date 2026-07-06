@@ -718,7 +718,17 @@ function kullaniciAvatarYukle(array $dosya, ?string $eskiDosya = null): ?string 
 // Yalnızca kendi sunucunuzda (paylaşımlı hosting değil) çalışır; exec() gerektirir.
 define('GIT_PROJE_KOKU', __DIR__ . '/..');
 
+// Bu özellik yalnızca Linux üzerinde (exec() + git binary'si mevcut) çalışır; Windows dağıtımlarında devre dışıdır.
+function gitGuncellemeDesteklerMi(): bool {
+    if (PHP_OS_FAMILY === 'Windows' || !function_exists('exec')) return false;
+    exec('which git 2>/dev/null', $c, $k);
+    return $k === 0 && !empty($c);
+}
+
 function gitKomutCalistir(string $komut): array {
+    if (!gitGuncellemeDesteklerMi()) {
+        return [false, 'Bu özellik yalnızca git kurulu Linux sunucularında kullanılabilir.'];
+    }
     // XAMPP/Apache ortamından miras kalan LD_LIBRARY_PATH, sistemin git-remote-https
     // yardımcı programının kullandığı libcurl/nghttp2 ile çakışıp "symbol lookup error"
     // veriyor; git'i sistem kütüphaneleriyle çalıştırmak için bu değişken temizlenir.
@@ -933,7 +943,7 @@ function mysqldumpCalistir(string $hedef, ?array &$hataCikti = null, array $opts
         if ($tablo !== '') $ekParam .= ' --ignore-table=' . escapeshellarg(DB_NAME . '.' . $tablo);
     }
 
-    $cmd = escapeshellcmd('/opt/lampp/bin/mysqldump')
+    $cmd = escapeshellcmd(MYSQLDUMP_PATH)
          . ' --defaults-extra-file=' . escapeshellarg($cnf)
          . $ekParam
          . ' ' . escapeshellarg(DB_NAME)
@@ -952,7 +962,7 @@ function mysqlRestoreCalistir(string $dosya, ?array &$hataCikti = null, ?string 
         "[client]\nuser=\"" . str_replace('"', '\"', DB_USER) . "\"\n"
         . "password=\"" . str_replace('"', '\"', DB_PASS) . "\"\n");
 
-    $cmd = escapeshellcmd('/opt/lampp/bin/mysql')
+    $cmd = escapeshellcmd(MYSQL_PATH)
          . ' --defaults-extra-file=' . escapeshellarg($cnf)
          . ' ' . escapeshellarg($hedefDb ?? DB_NAME)
          . ' < ' . escapeshellarg($dosya) . ' 2>&1';
